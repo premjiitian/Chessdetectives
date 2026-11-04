@@ -7,6 +7,8 @@ import { describeMove } from '../lib/coach';
 import type { EngineLine } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, esc, md } from '../ui/dom';
+import { speak, stop as stopVoice, voiceControl } from '../lib/voice';
+import { speechText } from './train';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const LEVELS = [
@@ -57,12 +59,14 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
           <select data-level>${LEVELS.map((l) => `<option value="${l.elo}" ${l.elo === level ? 'selected' : ''}>${l.label}</option>`).join('')}</select>
         </label>
       </div>
+      <div class="voice-slot"></div>
       <div class="feed card" aria-live="polite"></div>
       <div class="card moves"><h4>Moves</h4><div class="movelist"></div></div>
     </aside>
   </div>`;
 
   const engine = getEngine();
+  $(view, '.voice-slot').append(voiceControl());
   const feed = $(view, '.feed');
   const evalbar = $(view, '.evalbar');
   const moveList = $(view, '.movelist');
@@ -78,6 +82,7 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
     d.innerHTML = html;
     feed.append(d);
     feed.scrollTop = feed.scrollHeight;
+    speak(speechText(d));
   };
 
   const board = new Board($(view, '#board'), { fen: startFen, orientation: color, onMove: userMove });
@@ -234,6 +239,7 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
   start();
   return () => {
     destroyed = true;
+    stopVoice();
     engine.clearQueue();
     board.destroy();
   };

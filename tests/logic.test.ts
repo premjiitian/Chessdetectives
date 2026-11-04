@@ -163,3 +163,21 @@ describe('difficulty', () => {
     expect(hard.reasons.join(' ')).toMatch(/quiet/);
   });
 });
+
+import { sayMove, toSpeech } from '../src/lib/voice';
+describe('voice coach wording', () => {
+  it('says moves like a human', () => {
+    expect(sayMove('Nxe5+')).toBe('Knight takes e5, check');
+    expect(sayMove('exd5')).toBe('e pawn takes d5');
+    expect(sayMove('e4')).toBe('e4');
+    expect(sayMove('O-O')).toBe('castles kingside');
+    expect(sayMove('e8=Q#')).toBe('e8 promotes to Queen, checkmate');
+    expect(sayMove('Rae1')).toBe('Rook a e1');
+  });
+  it('cleans a coach line for speech', () => {
+    expect(toSpeech("After 28...Rc8 you win — nice.")).toBe('After Rook c8 you win, nice.');
+    expect(toSpeech('You lose 4 points (pawn = 1, queen = 9).')).toBe('You lose 4 points.');
+    expect(toSpeech("Rc8 is good. Stockfish's main line: 28...Rc8 29.Nd5. Great.")).toBe('Rook c8 is good. Great.');
+    expect(toSpeech('Chances fell from 82% to 46%')).toBe('Chances fell from 82 percent to 46 percent');
+  });
+});

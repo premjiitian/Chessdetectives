@@ -12,7 +12,8 @@ import { difficultyOf } from '../lib/difficulty';
 import { buildSession, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
 import type { EngineLine, MistakeRecord, ThemeId } from '../lib/types';
 import { Board } from '../ui/board';
-import { $, confetti, esc, md, timeAgo, toast } from '../ui/dom';
+import { $, confetti, esc, longDate, md, timeAgo, timeControlLabel, toast } from '../ui/dom';
+import { speak, stop as stopVoice, voiceControl } from '../lib/voice';
 
 const ACCEPT = 3; // a move within 3% win chance of the best counts as best
 const ALTERNATIVE = 10; // within 10% is a "good alternative"
@@ -71,6 +72,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     <aside class="coach-col">
       <div class="case-head card"></div>
       <div class="feed card" aria-live="polite"></div>
+      <div class="voice-slot"></div>
       <div class="controls">
         <button class="btn" data-act="hint">💡 Hint</button>
         <button class="btn ghost" data-act="solution">Show solution</button>
@@ -80,6 +82,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
   </div>`;
 
   const engine = getEngine();
+  $(view, '.voice-slot').append(voiceControl());
   const feed = $(view, '.feed');
   const head = $(view, '.case-head');
   const evalbar = $(view, '.evalbar');
@@ -116,6 +119,22 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     div.innerHTML = html;
     feed.append(div);
     feed.scrollTop = feed.scrollHeight;
+    if (kind !== 'you') {
+      const spoken = speechText(div);
+      if (spoken) {
+        speak(spoken);
+        const replay = document.createElement('button');
+        replay.className = 'replay';
+        replay.title = 'Listen';
+        replay.setAttribute('aria-label', 'Listen to this message');
+        replay.textContent = '🔈';
+        replay.addEventListener('click', () => {
+          stopVoice();
+          speak(spoken, true);
+        });
+        div.append(replay);
+      }
+    }
     return div;
   };
   const paras = (lines: string[]) => lines.map((l) => `<p>${md(l)}</p>`).join('');
@@ -164,8 +183,15 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
         ${card?.attempts ? `<span class="review">↻ review</span>` : '<span class="new">new</span>'}
       </div>
       <h2>${m.userColor === 'white' ? 'White' : 'Black'} to move — find the best move</h2>
-      <p class="meta">Move ${m.moveNumber} · vs <b>${esc(game?.opponent ?? 'opponent')}</b>${game ? ` (${game.opponentRating})` : ''} · ${esc(m.timeClass)} · ${timeAgo(m.endTime)}</p>
-      <p class="meta">${esc(m.opening)}</p>
+      <div class="flashback">
+        <div class="fb-ico">📅</div>
+        <div>
+          <div class="fb-title">Remember this game?</div>
+          <div class="fb-when">${esc(longDate(m.endTime))} <span class="sub">· ${timeAgo(m.endTime)}</span></div>
+          <div class="fb-who">You (${m.userColor}${game ? `, ${game.userRating}` : ''}) vs <b>${esc(game?.opponent ?? 'opponent')}</b>${game ? ` (${game.opponentRating})` : ''}${game ? ` · <span class="res ${game.result}">${game.result === 'win' ? 'you won' : game.result === 'loss' ? 'you lost' : 'draw'}</span>` : ''}</div>
+          <div class="sub">${esc(m.timeClass)}${game ? ` · ${esc(timeControlLabel(game.timeControl))}` : ''} · move ${m.moveNumber} · ${esc(m.opening)}</div>
+        </div>
+      </div>
       <div class="reveal-row">
         <button class="chip-reveal" data-reveal="difficulty" aria-label="Reveal difficulty">
           <span class="chip-k">Difficulty</span>
@@ -207,8 +233,13 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     // Small hook used by the automated browser test (tests/e2e.mjs).
     (window as any).__cd = () => ({ played: m.playedUci, best: m.bestUci, color: m.userColor });
 
+    const when = timeAgo(m.endTime);
+    const flash = game
+      ? `<p>Flashback to ${esc(when)}: you had ${m.userColor} against <b>${esc(game.opponent)}</b> (${game.opponentRating}), and ${game.result === 'win' ? 'you won that game' : game.result === 'loss' ? 'you lost that game' : 'it ended in a draw'}.</p>`
+      : '';
+    stopVoice();
     say(
-      `<p>In the game you played <b class="bad-move">${esc(m.played)}</b>${m.timePressure ? ' (with the clock running low ⏱)' : ''} and your winning chances went from <b>${m.winBefore}%</b> to <b>${m.winAfter}%</b>.</p><p>Let's investigate. Look for checks, captures and threats first — then find a better move.</p>`,
+      `${flash}<p>On move ${m.moveNumber} you played <b class="bad-move">${esc(m.played)}</b>${m.timePressure ? ' (with the clock running low ⏱)' : ''} and your winning chances went from <b>${m.winBefore}%</b> to <b>${m.winAfter}%</b>.</p><p>Let's investigate. Look for checks, captures and threats first — then find a better move.</p>`,
     );
     top = firstTop = analyse(m.fenBefore);
     const thisCase = m;
@@ -455,9 +486,18 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
   load(0);
   return () => {
     destroyed = true;
+    stopVoice();
     engine.clearQueue();
     board?.destroy();
   };
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** The words of a message, without buttons or decoration. */
+export function speechText(div: HTMLElement): string {
+  const c = div.cloneNode(true) as HTMLElement;
+  c.querySelectorAll('button, a.btn').forEach((b) => b.remove());
+  c.querySelectorAll('p, h4, div').forEach((e) => e.append(' '));
+  return (c.textContent ?? '').replace(/\s+/g, ' ').trim();
+}

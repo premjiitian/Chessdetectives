@@ -24,6 +24,18 @@ await new Promise((r) => server.stdout.on('data', (d) => String(d).includes('Loc
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
 const page = await ctx.newPage();
+// Headless Chromium has no voices: record what the voice coach would say.
+await page.addInitScript(() => {
+  window.__spoken = [];
+  const fake = {
+    speak: (u) => window.__spoken.push(u.text),
+    cancel: () => {},
+    getVoices: () => [{ name: 'Test Natural Voice', lang: 'en-US', voiceURI: 'test', localService: true }],
+    addEventListener: () => {},
+  };
+  Object.defineProperty(window, 'speechSynthesis', { value: fake });
+  window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+});
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && !m.text().includes('Failed to load resource') && errors.push(m.text()));
@@ -73,7 +85,10 @@ step('train');
 await page.click('a[href="#/train"]');
 await page.waitForSelector('.trainer .case-head h2', { timeout: 20000 });
 await page.waitForTimeout(2500);
+await page.click('[data-v=toggle]');
+await page.waitForTimeout(300);
 await shot('04-train-start');
+console.log('  flashback:', (await page.$eval('.flashback', (e) => e.innerText)).replace(/\n/g, ' | '));
 const hiddenAtStart = await page.$$eval('.chip-reveal.shown', (e) => e.length);
 await page.click('[data-reveal=difficulty]');
 await page.waitForTimeout(300);
@@ -107,7 +122,7 @@ if (current) {
   await page.waitForSelector('.msg.bad', { timeout: 30000 });
   await page.waitForTimeout(1200);
   await shot('05-train-wrong');
-  await page.click('.msg.coach button');
+  await page.click('.msg.coach button:not(.replay)');
   step('hint x2');
   await page.click('[data-act=hint]');
   await page.click('[data-act=hint]');
@@ -128,6 +143,8 @@ if (current) {
   await page.waitForSelector('.stamp', { timeout: 30000 });
   await page.waitForTimeout(600);
   await shot('08-train-solved');
+  const spoken = await page.evaluate(() => window.__spoken);
+  console.log(`  voice coach spoke ${spoken.length} lines, e.g.:\n` + spoken.slice(0, 6).map((t) => '  🔊 ' + t).join('\n'));
   console.log('  tags revealed after solve:', await page.$$eval('.chip-reveal.shown', (e) => e.length));
   const feed = await page.$eval('.feed', (e) => e.innerText);
   console.log('  ---- coach feed ----\n' + feed.split('\n').filter(Boolean).map((l) => '  | ' + l).join('\n'));

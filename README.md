@@ -9,7 +9,7 @@
 | Screen | What you get |
 | --- | --- |
 | **Dashboard** | Your most frequent mistake types for the last **7 days, 30 days, 90 days, 120 days, 1 year or 3 years**, compared with the period before (“▼ improving”). Accuracy, blunders per game, when mistakes happen (opening / middlegame / endgame), time-pressure share and your openings. |
-| **Train** | Puzzles made from *your own* blunders. Find the best move. If you pick a decent alternative, the coach explains why it's reasonable — but pushes you to find the best one. If you pick a bad move, Stockfish shows you the punishment on the board. After the right move, Stockfish replies like a real opponent and the puzzle continues while precision is needed. Progressive hints (idea → theme → piece → move). Each puzzle has a **Difficulty** (★ Beginner → ★★★★★ Expert, with a rough rating) and a **Topic**, both hidden until you tap to reveal them, so they never spoil the search. An “Always show” switch is there if you prefer, and both are revealed automatically once the case is solved. |
+| **Train** | Puzzles made from *your own* blunders. Find the best move. If you pick a decent alternative, the coach explains why it's reasonable — but pushes you to find the best one. If you pick a bad move, Stockfish shows you the punishment on the board. After the right move, Stockfish replies like a real opponent and the puzzle continues while precision is needed. Progressive hints (idea → theme → piece → move). Each puzzle has a **Difficulty** (★ Beginner → ★★★★★ Expert, with a rough rating) and a **Topic**, both hidden until you tap to reveal them, so they never spoil the search. An “Always show” switch is there if you prefer, and both are revealed automatically once the case is solved. A **“Remember this game?”** card shows when you played it, against whom (with ratings), the result and the time control. Turn on the **🔊 voice coach** to hear the coaching read aloud (moves are spoken naturally, e.g. “Knight takes e5, check”); every message also has a 🔈 replay button. |
 | **Case files** | A gallery of every mistake found, filterable by theme, severity and status. |
 | **Spar** | Play any position from your games (or a full game) against Stockfish at 1350 – 2600 Elo or full strength, with every move graded (Best / Excellent / Good / Inaccuracy / Mistake / Blunder). |
 | **Progress** | XP, detective ranks, daily streak, training calendar, badges and theme mastery. |
@@ -73,6 +73,7 @@ src/
 ## Ideas for next steps
 
 - An optional AI coach (e.g. Claude) for richer, conversational explanations.
+- Studio-quality voices: the voice coach uses the free voices built into your device; a paid text-to-speech service could make it sound even more human.
 - Lichess account support.
 - Opening repertoire drills built from your most-played openings.
 

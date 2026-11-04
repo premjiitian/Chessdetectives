@@ -57,3 +57,20 @@ export function confetti() {
   document.body.append(host);
   setTimeout(() => host.remove(), 2600);
 }
+
+/** "Wednesday, Oct 29, 2026" */
+export function longDate(sec: number): string {
+  return new Date(sec * 1000).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** "180+2" -> "3 min + 2 s", "1/259200" -> "3 days per move". */
+export function timeControlLabel(tc: string): string {
+  if (!tc) return '';
+  if (tc.includes('/')) {
+    const days = Math.round(Number(tc.split('/')[1]) / 86400);
+    return `${days} day${days === 1 ? '' : 's'} per move`;
+  }
+  const [base, inc] = tc.split('+').map(Number);
+  const b = base >= 60 ? `${Math.round(base / 60)} min` : `${base} s`;
+  return inc ? `${b} + ${inc} s` : b;
+}

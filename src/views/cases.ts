@@ -50,7 +50,7 @@ export function renderCases(view: HTMLElement, params: URLSearchParams) {
               <div class="case-top"><span class="sev ${m.severity}">${m.severity}</span>${badge}</div>
               <strong>${THEMES[m.theme].icon} ${esc(THEMES[m.theme].title)}</strong>
               <span class="meta">Move ${m.moveNumber} · you played ${esc(m.played)} · −${m.winLoss}%</span>
-              <span class="meta">${esc(m.timeClass)} · ${timeAgo(m.endTime)}</span>
+              <span class="meta">📅 ${timeAgo(m.endTime)} vs ${esc(app.gameOf(m)?.opponent ?? 'opponent')} · ${esc(m.timeClass)}</span>
             </div>
           </a>`;
         })
