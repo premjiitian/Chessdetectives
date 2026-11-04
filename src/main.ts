@@ -12,6 +12,7 @@ import { renderCases } from './views/cases';
 import { renderPlay } from './views/play';
 import { renderProgress } from './views/progress';
 import { renderChapters } from './views/chapters';
+import { renderRepertoire } from './views/repertoire';
 
 export type Cleanup = (() => void) | void;
 const root = document.getElementById('app')!;
@@ -30,6 +31,7 @@ function shell(active: string) {
         ${link('chapters', 'Chapters', '📺')}
         ${link('train', 'Train', '🧩')}
         ${link('cases', 'Case files', '🗂️')}
+        ${link('repertoire', 'Repertoire', '📚')}
         ${link('play', 'Spar', '♟️')}
         ${link('progress', 'Progress', '🏆')}
       </nav>
@@ -73,6 +75,9 @@ async function route() {
       break;
     case 'play':
       cleanup = renderPlay(view, params);
+      break;
+    case 'repertoire':
+      cleanup = renderRepertoire(view, params);
       break;
     case 'chapters':
       cleanup = renderChapters(view, rest[0] ? Number(rest[0]) : undefined);

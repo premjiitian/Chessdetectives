@@ -335,3 +335,14 @@ describe('progress sync between devices', () => {
     expect(mergeProgress(m, m).log).toHaveLength(2); // syncing twice changes nothing
   });
 });
+
+describe('coach truthfulness in the opening', () => {
+  it('does not call an early pawn move a king escape square', () => {
+    const facts = describeMove('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1', 'd7d6').facts.join(' ');
+    expect(facts).not.toMatch(/escape square/);
+  });
+  it('still spots a real escape square for a castled king later on', () => {
+    const facts = describeMove('6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 30', 'h2h3').facts.join(' ');
+    expect(facts).toMatch(/escape square/);
+  });
+});

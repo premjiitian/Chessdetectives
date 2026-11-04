@@ -352,7 +352,9 @@ function quietMoveFacts(before: Chess, after: Chess, mv: Move, pv: string[]): st
     if (targets.length) out.push(`It's a pawn break: it challenges the pawn on ${targets[0]} and opens lines for your pieces.`);
     const king = after.board().flat().find((p) => p && p.type === 'k' && p.color === me);
     const backRank = me === 'w' ? '1' : '8';
-    if (king && king.square[1] === backRank && Math.abs(king.square.charCodeAt(0) - mv.from.charCodeAt(0)) <= 1 && Math.abs(+mv.from[1] - +backRank) === 1)
+    const castled = king && 'abcgh'.includes(king.square[0]);
+    const moveNo = Number(before.fen().split(' ')[5] ?? 1);
+    if (king && castled && moveNo > 10 && king.square[1] === backRank && Math.abs(king.square.charCodeAt(0) - mv.from.charCodeAt(0)) <= 1 && Math.abs(+mv.from[1] - +backRank) === 1)
       out.push('It gives your king an escape square, so back-rank tricks won’t work.');
     const ranksAhead = me === 'w' ? +mv.to[1] - 2 : 7 - +mv.to[1];
     if (!out.length && ranksAhead >= 2 && 'cdef'.includes(mv.to[0])) out.push('It grabs space, so your pieces have more room behind it.');
