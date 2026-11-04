@@ -47,6 +47,20 @@ Type your chess.com username and press **Start investigating**.
 2. Under **Source**, choose **GitHub Actions**.
 3. Push to `main` (or run the “Deploy to GitHub Pages” workflow by hand). Your app appears at `https://<your-name>.github.io/<repo-name>/`.
 
+## iPad (Safari and Chrome)
+
+On iPad every browser — Safari *and* Chrome — uses Apple's WebKit engine, so the app is built and tested for that:
+finger-sized buttons, tap-a-piece-then-a-square moves, no accidental page zoom or scrolling while moving pieces,
+a board that fits portrait and landscape, and audio that keeps working after the first tap.
+
+**Tip:** in Safari tap **Share → Add to Home Screen** — Chess Detectives then opens full-screen like an app, with its own icon.
+
+Quick check on a real iPad (2 minutes):
+1. Open the site, type a username — the page should not zoom in.
+2. In a puzzle, tap a piece then a square; also try dragging. The page must not scroll.
+3. Tap **🔈 Voice coach** — Professor Pin should speak, and keep speaking after your next moves.
+4. Turn the iPad sideways and back — the board and the Hint button stay on screen.
+
 ## Checks
 
 ```bash

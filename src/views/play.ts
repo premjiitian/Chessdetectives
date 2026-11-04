@@ -2,7 +2,7 @@
 // with a coach grading each of your moves as you go.
 
 import { getEngine } from '../lib/engine';
-import { flip, formatEval, winPercent } from '../lib/evaluation';
+import { flip, shortEval, winPercent } from '../lib/evaluation';
 import { describeMove } from '../lib/coach';
 import type { EngineLine } from '../lib/types';
 import { Board } from '../ui/board';
@@ -91,7 +91,7 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
     if (!line) return;
     const u = sideToMoveIsUser ? line : flip(line);
     (evalbar.querySelector('i') as HTMLElement).style.height = `${winPercent(u)}%`;
-    evalbar.querySelector('span')!.textContent = formatEval(u);
+    evalbar.querySelector('span')!.textContent = shortEval(u);
     evalbar.classList.toggle('black', color === 'black');
   }
 

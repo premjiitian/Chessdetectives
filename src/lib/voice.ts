@@ -151,6 +151,30 @@ async function prepareNatural(): Promise<boolean> {
   }
 }
 
+let sharedPlayer: HTMLAudioElement | null = null;
+function player(): HTMLAudioElement {
+  sharedPlayer ??= new Audio();
+  return sharedPlayer;
+}
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+/** Call from a tap: unlocks audio and speech on iPad/iPhone Safari. */
+export function unlockAudio() {
+  try {
+    const a = player();
+    a.src = SILENCE;
+    a.play().catch(() => {});
+    if (voiceSupported()) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+  } catch {}
+}
+if (typeof window !== 'undefined') {
+  // Any first tap anywhere also unlocks audio, so the coach can speak later.
+  const once = () => {
+    if (settings.enabled) unlockAudio();
+    window.removeEventListener('pointerdown', once);
+  };
+  window.addEventListener('pointerdown', once);
+}
+
 let queue: string[] = [];
 let playing = false;
 let generation = 0; // bumps on stop() so stale audio is dropped
@@ -186,10 +210,13 @@ async function pump() {
       const src = clip ? pinUrl(clip) : URL.createObjectURL(await synth(text));
       if (gen !== generation) break;
       await new Promise<void>((resolve) => {
-        const a = new Audio(src);
+        // One reused <audio>: iPad Safari only lets an element play after it
+        // was "unlocked" by a tap, so we keep using the same one.
+        const a = player();
         current = a;
-        a.playbackRate = settings.rate;
         a.onended = a.onerror = () => resolve();
+        a.src = src;
+        a.playbackRate = settings.rate;
         a.play().catch(() => resolve());
       });
     } catch {
@@ -283,6 +310,7 @@ export function voiceControl(): HTMLElement {
         <button class="btn small ghost" data-v="test">▶ Test voice</button>
       </details>`;
     wrap.querySelector('[data-v=toggle]')!.addEventListener('click', () => {
+      unlockAudio();
       updateSettings({ enabled: !settings.enabled });
       render();
       if (settings.enabled) {
@@ -307,6 +335,7 @@ export function voiceControl(): HTMLElement {
     wrap.querySelector<HTMLSelectElement>('[data-v=voice]')!.addEventListener('change', (e) => updateSettings({ voiceURI: (e.target as HTMLSelectElement).value }));
     wrap.querySelector<HTMLSelectElement>('[data-v=rate]')!.addEventListener('change', (e) => updateSettings({ rate: Number((e.target as HTMLSelectElement).value) }));
     wrap.querySelector('[data-v=test]')!.addEventListener('click', () => {
+      unlockAudio();
       stop();
       speak('Knight takes e5, check! It is a fork: your knight attacks the king and the rook at the same time.', true);
     });

@@ -20,6 +20,7 @@ const steps = [
   { name: 'Chapters journey', cmd: 'node tests/chapters.mjs', browser: true, metric: /(\d+\/\d+) checks passed/, fail: (out) => /❌/.test(out) },
   { name: 'Accessibility (light)', cmd: 'node tests/a11y.mjs', browser: true, metric: /Total issue types: (\d+)/, fail: (out) => !/Total issue types: 0/.test(out) },
   { name: 'Accessibility (dark)', cmd: 'node tests/a11y.mjs', env: { DARK: '1' }, browser: true, metric: /Total issue types: (\d+)/, fail: (out) => !/Total issue types: 0/.test(out) },
+  { name: 'iPad (4 sizes, touch)', cmd: 'node tests/ipad.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Walkthrough + screenshots', cmd: 'node tests/e2e.mjs', browser: true, metric: /(No console errors\.)/ },
 ];
 

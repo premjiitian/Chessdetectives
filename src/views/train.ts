@@ -5,7 +5,7 @@ import { app } from '../lib/app';
 import { parsePgn } from '../lib/analyzer';
 import { evalChange, evalWords, explainAlternative, explainBest, explainFailure, hints, numberedLine, QUOTES, type HintStep } from '../lib/coach';
 import { getEngine } from '../lib/engine';
-import { flip, formatEval, winPercent } from '../lib/evaluation';
+import { flip, shortEval, winPercent } from '../lib/evaluation';
 import { THEMES } from '../lib/themes';
 import { sanOf } from '../lib/tactics';
 import { difficultyOf } from '../lib/difficulty';
@@ -152,7 +152,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const userLine = sideToMoveIsUser ? line : flip(line);
     const w = winPercent(userLine);
     (evalbar.querySelector('i') as HTMLElement).style.height = `${w}%`;
-    evalbar.querySelector('span')!.textContent = formatEval(userLine);
+    evalbar.querySelector('span')!.textContent = shortEval(userLine);
     evalbar.classList.toggle('black', m.userColor === 'black');
   };
 
