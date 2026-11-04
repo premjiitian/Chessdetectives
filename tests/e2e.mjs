@@ -74,6 +74,11 @@ await page.click('a[href="#/train"]');
 await page.waitForSelector('.trainer .case-head h2', { timeout: 20000 });
 await page.waitForTimeout(2500);
 await shot('04-train-start');
+const hiddenAtStart = await page.$$eval('.chip-reveal.shown', (e) => e.length);
+await page.click('[data-reveal=difficulty]');
+await page.waitForTimeout(300);
+await page.locator('.case-head').screenshot({ path: `${OUT}/04b-difficulty-revealed.png` });
+console.log('  tags revealed at start:', hiddenAtStart, '| difficulty:', await page.$eval('[data-reveal=difficulty] .chip-shown', (e) => e.textContent.trim()));
 
 const sq = async (s, color) => {
   const box = await page.$eval('#board cg-board', (e) => {
@@ -123,6 +128,7 @@ if (current) {
   await page.waitForSelector('.stamp', { timeout: 30000 });
   await page.waitForTimeout(600);
   await shot('08-train-solved');
+  console.log('  tags revealed after solve:', await page.$$eval('.chip-reveal.shown', (e) => e.length));
   const feed = await page.$eval('.feed', (e) => e.innerText);
   console.log('  ---- coach feed ----\n' + feed.split('\n').filter(Boolean).map((l) => '  | ' + l).join('\n'));
 }

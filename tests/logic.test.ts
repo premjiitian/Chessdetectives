@@ -150,3 +150,16 @@ describe('stats & parsing', () => {
     expect(p.fens).toHaveLength(4);
   });
 });
+
+import { difficultyOf } from '../src/lib/difficulty';
+describe('difficulty', () => {
+  it('rates a free capture as easy and a quiet defensive move as harder', () => {
+    // Free rook on a8 for the white bishop.
+    const easy = difficultyOf({ fenBefore: 'r3k3/8/8/8/8/8/6B1/4K3 w - - 0 1', pv: ['g2a8'], theme: 'missed-win' });
+    // Quiet move that stops a threat.
+    const hard = difficultyOf({ fenBefore: 'r1b1k1nr/p2pppbp/1qp3p1/8/2B1P3/2N2Q2/PPP2PPP/R1B1K2R b KQkq - 3 8', pv: ['e7e6', 'e1g1'], theme: 'ignored-threat' });
+    expect(easy.level).toBeLessThan(hard.level);
+    expect(easy.label).toBe('Beginner');
+    expect(hard.reasons.join(' ')).toMatch(/quiet/);
+  });
+});

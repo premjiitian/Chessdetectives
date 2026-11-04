@@ -8,6 +8,7 @@ import { getEngine } from '../lib/engine';
 import { flip, formatEval, winPercent } from '../lib/evaluation';
 import { THEMES } from '../lib/themes';
 import { sanOf } from '../lib/tactics';
+import { difficultyOf } from '../lib/difficulty';
 import { buildSession, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
 import type { EngineLine, MistakeRecord, ThemeId } from '../lib/types';
 import { Board } from '../ui/board';
@@ -102,6 +103,11 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
   let top: Promise<EngineLine[]> = Promise.resolve([]);
   let lastMove: [string, string] | undefined;
   let hintsLeft = 0;
+  let revealAll = () => {};
+  let alwaysShow = false;
+  try {
+    alwaysShow = localStorage.getItem('always-show-tags') === '1';
+  } catch {}
   let firstTop: Promise<EngineLine[]> = Promise.resolve([]);
 
   const say = (html: string, kind: 'coach' | 'you' | 'good' | 'bad' | 'alt' | 'lesson' = 'coach') => {
@@ -149,6 +155,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       if (prev) lastMove = [prev.slice(0, 2), prev.slice(2, 4)];
     }
     const info = THEMES[m.theme];
+    const diff = difficultyOf(m);
     const card = p.cards[m.id];
     head.innerHTML = `
       <div class="case-top">
@@ -158,7 +165,39 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       </div>
       <h2>${m.userColor === 'white' ? 'White' : 'Black'} to move — find the best move</h2>
       <p class="meta">Move ${m.moveNumber} · vs <b>${esc(game?.opponent ?? 'opponent')}</b>${game ? ` (${game.opponentRating})` : ''} · ${esc(m.timeClass)} · ${timeAgo(m.endTime)}</p>
-      <p class="meta">${esc(m.opening)}</p>`;
+      <p class="meta">${esc(m.opening)}</p>
+      <div class="reveal-row">
+        <button class="chip-reveal" data-reveal="difficulty" aria-label="Reveal difficulty">
+          <span class="chip-k">Difficulty</span>
+          <span class="chip-hidden">👁 Tap to reveal</span>
+          <span class="chip-shown"><span class="stars" aria-hidden="true">${'★'.repeat(diff.level)}${'☆'.repeat(5 - diff.level)}</span> ${esc(diff.label)} · ≈${diff.rating}</span>
+        </button>
+        <button class="chip-reveal" data-reveal="topic" aria-label="Reveal topic">
+          <span class="chip-k">Topic</span>
+          <span class="chip-hidden">👁 Tap to reveal</span>
+          <span class="chip-shown">${info.icon} ${esc(info.title)}</span>
+        </button>
+        <label class="always"><input type="checkbox" data-always ${alwaysShow ? 'checked' : ''}/> Always show</label>
+      </div>
+      <p class="diff-why" hidden>Why ${esc(diff.label.toLowerCase())}: ${esc(diff.reasons.join('; '))}.</p>`;
+    const reveal = (which: 'difficulty' | 'topic') => {
+      head.querySelector(`[data-reveal=${which}]`)?.classList.add('shown');
+      if (which === 'difficulty') (head.querySelector('.diff-why') as HTMLElement).hidden = false;
+    };
+    head.querySelectorAll<HTMLButtonElement>('[data-reveal]').forEach((b) =>
+      b.addEventListener('click', () => reveal(b.dataset.reveal as 'difficulty' | 'topic')),
+    );
+    head.querySelector<HTMLInputElement>('[data-always]')!.addEventListener('change', (e) => {
+      alwaysShow = (e.target as HTMLInputElement).checked;
+      try {
+        localStorage.setItem('always-show-tags', alwaysShow ? '1' : '');
+      } catch {}
+      if (alwaysShow) (['difficulty', 'topic'] as const).forEach(reveal);
+    });
+    if (alwaysShow) (['difficulty', 'topic'] as const).forEach(reveal);
+    // Training a chosen theme? Then the topic is no secret.
+    if (theme) reveal('topic');
+    revealAll = () => (['difficulty', 'topic'] as const).forEach(reveal);
 
     board?.destroy();
     stepFen = m.fenBefore;
@@ -379,6 +418,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       `<p>Want to prove it? Play this position out against Stockfish.</p><a class="btn small" href="#/play?fen=${encodeURIComponent(m.fenBefore)}&color=${m.userColor}">♟️ Play it out vs Stockfish</a>`,
       'coach',
     );
+    revealAll();
     if (result === 'clean') confetti();
     for (const b of sum.newBadges) toast(`${BADGES[b].icon} <b>Badge unlocked:</b> ${esc(BADGES[b].title)}`, 'win', 5000);
     if (sum.rankUp) toast(`🎉 New rank: <b>${esc(rankOf(p.xp).title)}</b> (was ${esc(rankBefore.title)})`, 'win', 6000);

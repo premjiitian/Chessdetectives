@@ -268,6 +268,20 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .grade.inacc { background: var(--alt); color: #fff; }
 .grade.mist, .grade.blun { background: var(--bad); color: #fff; }
 
+/* hidden-until-tapped puzzle tags */
+.reveal-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.chip-reveal { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 20px; border: 1px dashed var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: 0.88em; cursor: pointer; }
+.chip-reveal:hover { border-color: var(--accent); }
+.chip-k { font-weight: 700; color: var(--muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+.chip-hidden { color: var(--accent); font-weight: 600; }
+.chip-shown { display: none; font-weight: 700; }
+.chip-reveal.shown { border-style: solid; background: var(--accent-soft); cursor: default; }
+.chip-reveal.shown .chip-hidden { display: none; }
+.chip-reveal.shown .chip-shown { display: inline; animation: pop 0.25s; }
+.stars { color: var(--gold); letter-spacing: 1px; }
+.always { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 0.82em; margin-left: auto; cursor: pointer; }
+.diff-why { color: var(--muted); font-size: 0.85em; margin: 8px 0 0; }
+
 /* ---------- case files ---------- */
 .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; padding: 12px 16px; }
 .filters .count { margin-left: auto; color: var(--muted); font-weight: 600; }
