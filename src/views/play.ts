@@ -2,6 +2,7 @@
 // with a coach grading each of your moves as you go.
 
 import { getEngine } from '../lib/engine';
+import { botMove } from '../lib/bot';
 import { flip, shortEval, winPercent } from '../lib/evaluation';
 import { describeMove } from '../lib/coach';
 import type { EngineLine } from '../lib/types';
@@ -12,13 +13,16 @@ import { speechText } from './train';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const LEVELS = [
+  { elo: 600, label: '🐣 Beginner · about 600' },
+  { elo: 900, label: '🧒 Kid · about 900' },
+  { elo: 1100, label: '🙂 Improver · about 1100' },
   { elo: 1350, label: 'Club player · 1350' },
   { elo: 1600, label: 'Strong club · 1600' },
   { elo: 1900, label: 'Expert · 1900' },
   { elo: 2200, label: 'Master · 2200' },
   { elo: 2600, label: 'Grandmaster · 2600' },
   { elo: 0, label: 'Full Stockfish 19 💀' },
-];
+]
 
 const GRADES = [
   { max: 2, name: 'Best', cls: 'best', say: ['Perfect — that is the engine move!', 'Top move!', 'Exactly what Stockfish wanted.'] },
@@ -32,9 +36,9 @@ const GRADES = [
 export function renderPlay(view: HTMLElement, params: URLSearchParams) {
   const startFen = params.get('fen') || START;
   const color = (params.get('color') as 'white' | 'black') || (startFen.split(' ')[1] === 'b' ? 'black' : 'white');
-  let level = 1600;
+  let level = 900;
   try {
-    level = Number(localStorage.getItem('spar-level') ?? 1600);
+    level = Number(localStorage.getItem('spar-level') ?? 900);
   } catch {}
 
   view.innerHTML = `
@@ -132,6 +136,8 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
 
   async function userMove(uci: string) {
     if (thinking) return;
+    stopVoice(); // a new move replaces the previous comment
+    feed.querySelectorAll('.msg:not(.old)').forEach((el) => el.classList.add('old'));
     const fenBefore = board.chess.fen();
     const before = lastEval ?? (await evaluate(fenBefore));
     const san = board.play(uci);
@@ -164,9 +170,9 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
       return;
     }
     // Stockfish's turn.
-    const r = await engine.search(board.chess.fen(), level ? { movetime: 700, elo: level } : { movetime: 900 }).catch(() => null);
-    if (destroyed || !r?.bestmove) return;
-    const reply = board.play(r.bestmove);
+    const mv = await botMove(engine, board.chess.fen(), level).catch(() => null);
+    if (destroyed || !mv) return;
+    const reply = board.play(mv);
     if (reply) {
       sans.push(reply);
       renderMoves();
@@ -189,9 +195,9 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
     if (board.chess.turn() !== userTurn) {
       board.setInteractive(false);
       thinking = true;
-      const r = await engine.search(startFen, level ? { movetime: 700, elo: level } : { movetime: 900 }).catch(() => null);
-      if (r?.bestmove) {
-        const s = board.play(r.bestmove);
+      const mv = await botMove(engine, startFen, level).catch(() => null);
+      if (mv) {
+        const s = board.play(mv);
         if (s) sans.push(s);
         renderMoves();
       }

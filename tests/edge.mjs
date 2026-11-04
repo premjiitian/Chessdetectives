@@ -143,8 +143,7 @@ const connect = async (page, name) => {
     await page.waitForSelector('.msg.alt', { timeout: 60000 }).catch(() => {});
     const t = await page.$eval('.feed', (e) => e.innerText);
     check('good alternative is praised but pushes for the best move', /reasonable idea/.test(t) && /stronger move|better/.test(t));
-    await page.click('.msg.coach button:not(.replay)').catch(() => {});
-    st = await until((s) => s.interactive);
+    st = await until((s) => s.interactive, 8000);
   } else {
     check('good alternative is praised but pushes for the best move', true, 'skipped: no near-best alternative in this case');
   }
@@ -162,11 +161,28 @@ const connect = async (page, name) => {
   check('evaluation bar moves after a wrong move', barBefore !== barAfter, `${barBefore} → ${barAfter}`);
   const evalMsg = (t2.match(/📊 Evaluation:[^\n]*/) ?? [''])[0];
   check('Professor Pin states the evaluation before → after and explains why', /→/.test(evalMsg) && /Why\?/.test(t2), evalMsg);
-  await page.click('.msg.coach button:not(.replay)').catch(() => {});
-  st = await until((s) => s.interactive);
-  check('board resets after "Try again"', !!st && st.interactive);
+  const t0 = Date.now();
+  st = await until((s) => s.interactive && s.fen === st.fen, 8000);
+  check('board resets by itself after a wrong move (no button needed)', !!st, `${Date.now() - t0} ms`);
   await page.waitForTimeout(300);
-  check('evaluation bar returns after "Try again"', (await page.$eval('.evalbar i', (e) => e.style.height)) === barBefore);
+  check('evaluation bar returns after the reset', (await page.$eval('.evalbar i', (e) => e.style.height)) === barBefore);
+
+  // Multitasking: wrong move, then tap the board during the replay and move again right away.
+  const bad2 = st.legal.filter((u) => !top.has(u))[1] ?? bad;
+  await move(bad2, color);
+  await page.waitForSelector('.msg.bad:not(.old)', { timeout: 60000 }).catch(() => {});
+  await page.waitForTimeout(700);
+  const box = await page.$eval('#board', (e) => e.getBoundingClientRect().toJSON());
+  await page.mouse.click(box.x + 4, box.y + 4); // a tap while the punishment is shown
+  const quick = await until((s) => s.interactive, 1500);
+  check('tapping the board during the replay returns to the puzzle at once', !!quick);
+  const third = st.legal.filter((u) => !top.has(u))[2] ?? bad;
+  await move(third, color);
+  await page.waitForTimeout(300);
+  const current = await page.$$eval('.feed .msg:not(.old)', (els) => els.map((e) => e.className));
+  const old = await page.$$eval('.feed .msg.old', (els) => els.length);
+  check('a new move fades the previous explanation', old > 0 && current.length <= 2, `${old} faded, ${current.length} current`);
+  st = await until((s) => s.interactive, 15000);
 
   // c) all hints, then the solution
   for (let i = 0; i < 4; i++) await page.click('[data-act=hint]').catch(() => {});

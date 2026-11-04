@@ -114,6 +114,8 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
   let top: Promise<EngineLine[]> = Promise.resolve([]);
   let lastMove: [string, string] | undefined;
   let hintsLeft = 0;
+  let attempt = 0; // bumps on every move you make; stale work is dropped
+  let reviewing = false; // showing what went wrong; any tap returns to the puzzle
   let revealAll = () => {};
   let alwaysShow = false;
   try {
@@ -236,6 +238,11 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     board?.destroy();
     stepFen = m.fenBefore;
     board = new Board($(view, '#board'), { fen: m.fenBefore, orientation: m.userColor, onMove: onUserMove });
+    const host = $(view, '#board');
+    if (!host.dataset.tapReset) {
+      host.dataset.tapReset = '1';
+      host.addEventListener('pointerdown', () => reviewing && resetStep(), { capture: true });
+    }
     board.sync(lastMove);
     hintSteps = hints(m.fenBefore, m.bestUci, info.hint);
     // Small hook used by the automated browser test (tests/e2e.mjs).
@@ -243,7 +250,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     (window as any).__cdStep = async () => {
       const lines = await top;
       return {
-        id: m.id, fen: stepFen, solved, busy, interactive: !!board && !solved && !busy,
+        id: m.id, fen: stepFen, solved, busy, interactive: !!board && !solved && !busy && !reviewing,
         best: lines[0]?.uci[0] ?? null,
         lines: lines.map((l) => ({ uci: l.uci[0], win: Math.round(winPercent(l)) })),
         legal: board ? board.chess.moves({ verbose: true }).map((x) => x.from + x.to + (x.promotion ?? '')) : [],
@@ -281,12 +288,17 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
 
   async function onUserMove(uci: string) {
     if (!board || busy || solved) return;
+    const my = ++attempt;
+    reviewing = false;
+    // A new move replaces the previous explanation: stop talking, fade old messages.
+    stopVoice();
+    feed.querySelectorAll('.msg:not(.old)').forEach((el) => el.classList.add('old'));
     busy = true;
     board.setInteractive(false);
     board.shapes([]);
     const fen = stepFen;
     const lines = await top;
-    if (destroyed) return;
+    if (destroyed || my !== attempt) return;
     const best = lines[0];
     if (!best) {
       busy = false;
@@ -308,6 +320,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     let reply: EngineLine | undefined;
     if (!line) {
       const after = await analyse(board.chess.fen(), 14, 1);
+      if (destroyed || my !== attempt) return;
       reply = after[0];
       line = reply ? { ...flip(reply), uci: [uci, ...reply.uci] } : undefined;
     }
@@ -324,40 +337,43 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       fails++;
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
       say(`<p><b>That's the move you played in the game!</b></p>${evalLine}<p>Why? Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
-      await punish(r);
+      await punish(r, my);
     } else if (gap <= ALTERNATIVE || (myWin >= 55 && gap <= 15)) {
       say(`${paras(explainAlternative(fen, uci, myWin, bestWin))}${line ? `<p class="eval-line">📊 Your move: ${esc(evalWords(line))}. The best move: ${esc(evalWords(best))}.</p>` : ''}`, 'alt');
-      await sleep(400);
-      tryAgainButton('Find the stronger move');
+      say('<p>↺ Good thinking — now find the even stronger move. The board resets in a moment (or tap it).</p>', 'coach');
+      await review(my);
     } else {
       fails++;
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
       say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${evalLine}<p>Why?</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
-      await punish(r);
+      await punish(r, my);
     }
   }
 
-  async function punish(r: EngineLine | undefined) {
+  async function punish(r: EngineLine | undefined, my: number) {
     if (!board || destroyed) return;
     const replyMove = r?.uci[0];
     if (replyMove) {
       await sleep(650);
+      if (destroyed || my !== attempt) return;
       board.play(replyMove);
       board.shapes([board.arrow(replyMove.slice(0, 2), replyMove.slice(2, 4), 'red')]);
     }
-    tryAgainButton(fails >= 2 && hintsUsed < hintSteps.length ? 'Try again (a hint might help 💡)' : 'Try again');
+    say(`<p>↺ Your turn again${fails >= 2 && hintsUsed < hintSteps.length ? ' — a 💡 hint might help' : ''}. The board resets in a moment (or tap it).</p>`, 'coach');
+    await review(my);
   }
 
-  function tryAgainButton(label: string) {
-    const msg = say(`<button class="btn small">${esc(label)} ↺</button>`, 'coach');
-    msg.querySelector('button')!.addEventListener('click', () => {
-      msg.remove();
-      resetStep();
-    });
+  /** Shows the punishment briefly, then puts the puzzle back so you can try again straight away. */
+  async function review(my: number) {
+    reviewing = true;
+    busy = false;
+    await sleep(1600);
+    if (!destroyed && my === attempt && reviewing) resetStep();
   }
 
   function resetStep() {
     if (!board) return;
+    reviewing = false;
     top.then((l) => !destroyed && setEval(l[0], true));
     board.setPosition(stepFen, steps === 0 ? lastMove : undefined);
     board.shapes([]);

@@ -251,6 +251,8 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .msg.good { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
 .msg.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, transparent); }
 .msg.alt { background: var(--alt-soft); border-color: color-mix(in srgb, var(--alt) 35%, transparent); }
+.msg.old { opacity: 0.55; transition: opacity 0.3s; }
+.msg.old:hover { opacity: 1; }
 .msg.lesson { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
 .msg h4 { margin: 0 0 4px; }
 .bad-move { color: var(--bad-ink); }
