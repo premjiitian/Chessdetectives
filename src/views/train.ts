@@ -232,7 +232,15 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     hintSteps = hints(m.fenBefore, m.bestUci, info.hint);
     // Small hook used by the automated browser test (tests/e2e.mjs).
     (window as any).__cd = () => ({ played: m.playedUci, best: m.bestUci, color: m.userColor });
-    (window as any).__cdStep = async () => ({ id: m.id, fen: stepFen, solved, busy, interactive: !!board && !solved && !busy, best: (await top)[0]?.uci[0] ?? null });
+    (window as any).__cdStep = async () => {
+      const lines = await top;
+      return {
+        id: m.id, fen: stepFen, solved, busy, interactive: !!board && !solved && !busy,
+        best: lines[0]?.uci[0] ?? null,
+        lines: lines.map((l) => ({ uci: l.uci[0], win: Math.round(winPercent(l)) })),
+        legal: board ? board.chess.moves({ verbose: true }).map((x) => x.from + x.to + (x.promotion ?? '')) : [],
+      };
+    };
 
     const when = timeAgo(m.endTime);
     const flash = game
