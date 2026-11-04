@@ -22,6 +22,7 @@ const steps = [
   { name: 'Accessibility (dark)', cmd: 'node tests/a11y.mjs', env: { DARK: '1' }, browser: true, metric: /Total issue types: (\d+)/, fail: (out) => !/Total issue types: 0/.test(out) },
   { name: 'iPad (4 sizes, touch)', cmd: 'node tests/ipad.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Sign-in UI (off / on)', cmd: 'node tests/signin.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
+  { name: 'Safety + saved progress', cmd: 'node tests/safety.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Walkthrough + screenshots', cmd: 'node tests/e2e.mjs', browser: true, metric: /(No console errors\.)/ },
 ];
 

@@ -24,6 +24,7 @@ and the Chess Detectives YouTube course as chapters.
 - Robot student: 0 stuck cases, 0 console errors; dismissed (false-alarm) cases ≤ 5 %.
 - Accessibility: 0 axe WCAG 2.1 AA issues on every screen, light **and** dark.
 - No sideways scrolling at 360 px; key buttons reachable next to the board on phones.
+- Safety: data from chess.com is always escaped (`esc()`); `tests/safety.mjs` attacks with hostile names.
 - Coaching is truthful (labels match the position), kind, plain-English, and says *why*.
 
 ## Conventions
