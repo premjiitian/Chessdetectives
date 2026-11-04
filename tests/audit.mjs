@@ -11,6 +11,10 @@ const USER = process.env.FIXTURE_USER ?? 'erik';
 const MAX = Number(process.env.MAX_CASES ?? 40);
 const port = 4196;
 const server = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], { stdio: 'pipe', detached: true });
+// cleanup-guard: always stop the preview server, even on failure or timeout
+const killServer = () => { try { process.kill(-server.pid); } catch {} };
+process.on('exit', killServer);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { killServer(); process.exit(1); });
 await new Promise((r) => server.stdout.on('data', (d) => String(d).includes('Local') && r()));
 const stop = () => { try { process.kill(-server.pid); } catch {} };
 

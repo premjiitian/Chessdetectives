@@ -27,6 +27,9 @@ describe('kid bot choices', () => {
     const games = readdirSync(dir).filter((f) => /^\d{4}-\d{2}\.json$/.test(f)).flatMap((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')).games).filter((g: any) => g.rules === 'chess');
     const fens = games.flatMap((g: any) => parsePgn(g.pgn).fens.filter((_, i) => i > 8 && i % 7 === 0)).slice(0, Number(process.env.N ?? 40));
     const loss: Record<number, number[]> = { 600: [], 900: [], 1100: [] };
+    // Same "dice rolls" every run, so the test can't fail by chance.
+    let seed = 42;
+    const rand = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
     for (const fen of fens) {
       const c = new Chess(fen);
       if (c.isGameOver()) continue;
@@ -36,7 +39,7 @@ describe('kid bot choices', () => {
       for (const lvl of [600, 900, 1100]) {
         const st = KID_LEVELS[lvl];
         const lines = (await engine.search(fen, { depth: st.depth, multipv: st.multipv })).lines;
-        const mv = chooseMove(lines, legal, st)!;
+        const mv = chooseMove(lines, legal, st, rand)!;
         const after = new Chess(fen);
         after.move({ from: mv.slice(0, 2), to: mv.slice(2, 4), promotion: mv[4] });
         const r = after.isCheckmate() ? { cp: -10000, mate: null } : (await engine.search(after.fen(), { depth: 9 })).lines[0];

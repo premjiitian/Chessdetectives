@@ -14,6 +14,10 @@ const OUT = 'tests/screens';
 mkdirSync(OUT, { recursive: true });
 const port = 4199;
 const server = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], { stdio: 'pipe', detached: true });
+// cleanup-guard: always stop the preview server, even on failure or timeout
+const killServer = () => { try { process.kill(-server.pid); } catch {} };
+process.on('exit', killServer);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { killServer(); process.exit(1); });
 const stopServer = () => {
   try {
     process.kill(-server.pid);
@@ -136,7 +140,7 @@ if (current) {
   await page.waitForSelector('.msg.bad', { timeout: 30000 });
   await page.waitForTimeout(1200);
   await shot('05-train-wrong');
-  await page.click('.msg.coach button:not(.replay)');
+  await page.waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => s.interactive), null, { timeout: 15000 }).catch(() => {});
   step('hint x2');
   await page.click('[data-act=hint]');
   await page.click('[data-act=hint]');

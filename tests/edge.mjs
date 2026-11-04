@@ -10,6 +10,10 @@ const FIX = process.env.FIXTURES;
 const USER = process.env.FIXTURE_USER ?? 'erik';
 const port = 4195;
 const server = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], { stdio: 'pipe', detached: true });
+// cleanup-guard: always stop the preview server, even on failure or timeout
+const killServer = () => { try { process.kill(-server.pid); } catch {} };
+process.on('exit', killServer);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { killServer(); process.exit(1); });
 await new Promise((r) => server.stdout.on('data', (d) => String(d).includes('Local') && r()));
 const browser = await chromium.launch();
 const results = [];
@@ -150,11 +154,11 @@ const connect = async (page, name) => {
 
   // b) a bad move
   const top = new Set(st.lines.map((l) => l.uci));
-  // pick the worst-looking legal move we can find quickly: one that isn't in the engine's top lines
-  const bad = st.legal.find((u) => !top.has(u));
+  // A move that is always bad here: the move from the actual game (that's why this puzzle exists).
+  const gameMove = (await page.evaluate(() => window.__cd())).played;
   const barBefore = await page.$eval('.evalbar i', (e) => e.style.height);
-  await move(bad, color);
-  await page.waitForSelector('.msg.bad', { timeout: 60000 }).catch(() => {});
+  await move(gameMove, color);
+  await page.waitForSelector('.msg.bad:not(.old)', { timeout: 60000 }).catch(() => {});
   const t2 = await page.$eval('.feed', (e) => e.innerText);
   const barAfter = await page.$eval('.evalbar i', (e) => e.style.height);
   check('bad move gets an explanation and Stockfish shows the punishment', /Not quite|move you played/.test(t2) && /answers/.test(t2));
@@ -168,16 +172,14 @@ const connect = async (page, name) => {
   check('evaluation bar returns after the reset', (await page.$eval('.evalbar i', (e) => e.style.height)) === barBefore);
 
   // Multitasking: wrong move, then tap the board during the replay and move again right away.
-  const bad2 = st.legal.filter((u) => !top.has(u))[1] ?? bad;
-  await move(bad2, color);
+  await move(gameMove, color);
   await page.waitForSelector('.msg.bad:not(.old)', { timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(700);
   const box = await page.$eval('#board', (e) => e.getBoundingClientRect().toJSON());
   await page.mouse.click(box.x + 4, box.y + 4); // a tap while the punishment is shown
   const quick = await until((s) => s.interactive, 1500);
   check('tapping the board during the replay returns to the puzzle at once', !!quick);
-  const third = st.legal.filter((u) => !top.has(u))[2] ?? bad;
-  await move(third, color);
+  await move(gameMove, color);
   await page.waitForTimeout(300);
   const current = await page.$$eval('.feed .msg:not(.old)', (els) => els.map((e) => e.className));
   const old = await page.$$eval('.feed .msg.old', (els) => els.length);

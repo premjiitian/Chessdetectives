@@ -335,15 +335,18 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       await correct(fen, line ?? best);
     } else if (uci === m.playedUci && steps === 0) {
       fails++;
+      reviewing = true; // from now on, a tap on the board skips ahead
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
       say(`<p><b>That's the move you played in the game!</b></p>${evalLine}<p>Why? Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
       await punish(r, my);
     } else if (gap <= ALTERNATIVE || (myWin >= 55 && gap <= 15)) {
+      reviewing = true;
       say(`${paras(explainAlternative(fen, uci, myWin, bestWin))}${line ? `<p class="eval-line">📊 Your move: ${esc(evalWords(line))}. The best move: ${esc(evalWords(best))}.</p>` : ''}`, 'alt');
       say('<p>↺ Good thinking — now find the even stronger move. The board resets in a moment (or tap it).</p>', 'coach');
       await review(my);
     } else {
       fails++;
+      reviewing = true;
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
       say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${evalLine}<p>Why?</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
       await punish(r, my);
@@ -355,17 +358,18 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const replyMove = r?.uci[0];
     if (replyMove) {
       await sleep(650);
-      if (destroyed || my !== attempt) return;
+      if (destroyed || my !== attempt || !reviewing) return; // skipped by a tap
       board.play(replyMove);
       board.shapes([board.arrow(replyMove.slice(0, 2), replyMove.slice(2, 4), 'red')]);
     }
+    if (!reviewing) return;
     say(`<p>↺ Your turn again${fails >= 2 && hintsUsed < hintSteps.length ? ' — a 💡 hint might help' : ''}. The board resets in a moment (or tap it).</p>`, 'coach');
     await review(my);
   }
 
   /** Shows the punishment briefly, then puts the puzzle back so you can try again straight away. */
   async function review(my: number) {
-    reviewing = true;
+    if (!reviewing) return;
     busy = false;
     await sleep(1600);
     if (!destroyed && my === attempt && reviewing) resetStep();
