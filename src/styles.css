@@ -355,6 +355,22 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .mv.on { background: var(--accent-btn); color: #fff; border-color: var(--accent-btn); opacity: 1; }
 .mv.on .no { color: #fff; }
 .rep-note .case-top { margin-bottom: 6px; }
+.step-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.coach-view h4 { margin: 14px 0 6px; font-size: 0.95rem; }
+.cv-summary { margin: 0; padding-left: 18px; color: var(--ink); }
+.cv-summary li { margin: 2px 0; }
+.cv-cands { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.cv-cands li { padding: 6px 8px; border-radius: 10px; }
+.cv-cands li.chosen { background: var(--good-soft); }
+.cv-cands li.chosen .sub { color: var(--good-ink); }
+.cv-line { font-variant-numeric: tabular-nums; margin-top: 2px; }
+.cv-lesson { background: var(--accent-soft); padding: 8px 10px; border-radius: 10px; margin-top: 10px; }
+.my-note { display: grid; gap: 6px; margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.my-note label { font-weight: 700; }
+.my-note textarea { width: 100%; font: inherit; font-size: max(16px, 1em); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); resize: vertical; }
+.my-note textarea:focus { outline: 3px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
+.mv.has-note::after { content: ' 📝'; font-size: 0.85em; }
+.your-note { background: var(--alt-soft); padding: 6px 10px; border-radius: 8px; }
 @media (pointer: coarse) { .mv { min-height: 44px; padding: 6px 10px; } }
 
 /* chapters (video course) */
@@ -399,6 +415,17 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
   .chapter-page { grid-template-columns: 1fr; }
   .rec { grid-template-columns: 1fr; }
   .rec-mini img { width: 90px; }
+}
+
+/* ---------- coach panel: buttons always in view on wide screens ---------- */
+@media (min-width: 821px) {
+  .trainer .coach-col { position: sticky; top: 76px; max-height: calc(100vh - 92px); display: flex; flex-direction: column; gap: 12px; }
+  .trainer .coach-col > * { flex: none; }
+  .trainer .coach-col > .feed { flex: 1 1 auto; min-height: 140px; max-height: none; overflow-y: auto; }
+  .trainer.rep .coach-col { position: static; max-height: none; display: grid; }
+}
+@media (min-width: 821px) and (max-width: 1100px) and (orientation: portrait) {
+  .trainer .coach-col { position: static; max-height: none; display: grid; }
 }
 
 /* ---------- iPad / touch ---------- */
@@ -448,7 +475,7 @@ button, a, select, summary { -webkit-tap-highlight-color: transparent; }
 .speeds { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -4px 0 14px; }
 .sp-label { color: var(--muted); font-weight: 600; font-size: 0.9em; }
 .sp { border: 1px solid var(--line); background: var(--panel); color: var(--muted); padding: 6px 12px; border-radius: 20px; font: inherit; font-weight: 600; font-size: 0.9em; cursor: pointer; text-decoration: line-through; }
-.sp small { font-weight: 700; opacity: 0.7; margin-left: 2px; }
+.sp small { font-weight: 700; margin-left: 2px; }
 .sp.on { background: var(--accent-soft); border-color: var(--accent-ink); color: var(--accent-ink); text-decoration: none; }
 .live-only { flex-basis: 100%; display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 0.92em; cursor: pointer; }
 .live-only input { width: 18px; height: 18px; accent-color: var(--accent-ink); }

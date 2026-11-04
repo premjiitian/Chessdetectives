@@ -25,6 +25,8 @@ export interface RepMove {
   usual?: { uci: string; san: string; count: number; score: number | null; win: number }; // for upgrades
   bestWin?: number;
   opening?: string;
+  /** Stockfish's top moves in the position BEFORE this move (side to move's view). */
+  candidates?: EngineLine[];
   children: RepMove[];
 }
 
@@ -163,6 +165,7 @@ export async function buildRepertoire(games: GameRecord[], color: Color, search:
           usual: usualInfo,
           bestWin: Math.round(bestWin),
           opening: topOpening(st),
+          candidates: lines.slice(0, 3).map((l) => ({ ...l, uci: l.uci.slice(0, 8) })),
           children: await expand(next, ply + 1),
         },
       ];

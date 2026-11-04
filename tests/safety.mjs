@@ -1,6 +1,7 @@
 // Loops 12-13: hostile data can't run code; progress survives reloads and private mode.
 //   FIXTURES=/path FIXTURE_USER=name node tests/safety.mjs
 import { createRequire } from 'node:module';
+import { waitStep } from './helpers.mjs';
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -107,7 +108,7 @@ async function connectAndAnalyze(page) {
   await connectAndAnalyze(page);
   await page.goto(`http://localhost:${port}/#/train`);
   await page.waitForSelector('.trainer .case-head h2');
-  await page.waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => s.interactive), null, { timeout: 60000 }).catch(() => {});
+  await waitStep(page, (s) => s.interactive, 60000);
   await page.waitForTimeout(2000);
   await page.click('[data-act=solution]');
   await page.waitForSelector('.stamp', { timeout: 60000 });

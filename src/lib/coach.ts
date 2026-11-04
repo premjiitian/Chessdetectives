@@ -3,7 +3,7 @@
 
 import { Chess, type Move, type Square } from 'chess.js';
 import { winPercent } from './evaluation';
-import { NAME, VALUE, attackedBy, forkAfter, isDefended, lineToSan, materialSwing, pinAfter, play, threatsAgainst, type Side } from './tactics';
+import { NAME, VALUE, attackedBy, forkAfter, isDefended, lineToSan, material, materialSwing, pinAfter, play, threatsAgainst, type Side } from './tactics';
 import type { EngineLine } from './types';
 
 const pieceName = (t: keyof typeof NAME) => NAME[t];
@@ -360,4 +360,112 @@ function quietMoveFacts(before: Chess, after: Chess, mv: Move, pv: string[]): st
     if (!out.length && ranksAhead >= 2 && 'cdef'.includes(mv.to[0])) out.push('It grabs space, so your pieces have more room behind it.');
   }
   return out.slice(0, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Grandmaster-coach view of a position: summary → candidates → plan → lesson.
+
+export interface CandidateView {
+  uci: string;
+  san: string;
+  eval: string; // plain words from the mover's side
+  reason: string;
+  line: string; // numbered main line
+  chosen: boolean;
+}
+
+export interface CoachView {
+  summary: string[];
+  candidates: CandidateView[];
+  plan: string[];
+  lesson: string;
+}
+
+const MINOR_HOME: Record<Side, string[]> = { w: ['b1', 'g1', 'c1', 'f1'], b: ['b8', 'g8', 'c8', 'f8'] };
+
+function developed(c: Chess, side: Side): number {
+  return MINOR_HOME[side].filter((sq) => {
+    const p = c.get(sq as Square);
+    return !(p && p.color === side && (p.type === 'n' || p.type === 'b'));
+  }).length;
+}
+
+function kingSafety(c: Chess, side: Side): string {
+  const k = c.board().flat().find((p) => p && p.type === 'k' && p.color === side);
+  if (!k) return '';
+  const home = side === 'w' ? '1' : '8';
+  if (k.square[1] === home && 'gh'.includes(k.square[0])) return 'castled short';
+  if (k.square[1] === home && 'abc'.includes(k.square[0])) return 'castled long';
+  return k.square[0] === 'e' && k.square[1] === home ? 'still in the center' : `on ${k.square}`;
+}
+
+/** A short, honest picture of the position from the side to move. */
+export function positionSummary(fen: string): string[] {
+  const c = new Chess(fen);
+  const me = c.turn() as Side;
+  const them: Side = me === 'w' ? 'b' : 'w';
+  const out: string[] = [];
+  const diff = material(c, me) - material(c, them);
+  out.push(diff === 0 ? 'Material is equal.' : diff > 0 ? `You are ${diff === 1 ? 'a pawn' : `${diff} points`} up.` : `You are ${-diff === 1 ? 'a pawn' : `${-diff} points`} down.`);
+  const moveNo = Number(fen.split(' ')[5] ?? 1);
+  if (moveNo <= 15) out.push(`Development: you have ${developed(c, me)} of 4 knights and bishops out, your opponent ${developed(c, them)}.`);
+  const ks = kingSafety(c, me);
+  const ko = kingSafety(c, them);
+  if (ks || ko) out.push(`King safety: your king is ${ks}; theirs is ${ko}.`);
+  const center = ['d4', 'e4', 'd5', 'e5']
+    .map((sq) => c.get(sq as Square))
+    .filter((p) => p && p.type === 'p');
+  const mine = center.filter((p) => p!.color === me).length;
+  const theirs = center.filter((p) => p!.color === them).length;
+  if (mine || theirs) out.push(mine > theirs ? 'You have more pawns in the center.' : mine < theirs ? 'Your opponent has more pawns in the center.' : 'The center is shared.');
+  return out;
+}
+
+function lessonFor(fen: string, facts: string[]): string {
+  const f = facts.join(' ');
+  const moveNo = Number(fen.split(' ')[5] ?? 1);
+  if (/castles/.test(f)) return 'Castle early: a safe king lets your pieces attack without worry.';
+  if (/develops/.test(f)) return 'In the opening, bring out a new piece with almost every move.';
+  if (/center|space/.test(f)) return 'Pawns in the center give your pieces room and take squares from your opponent.';
+  if (/threat/.test(f)) return "Always ask first: what does my opponent want? Stop it, then make your plan.";
+  if (/pawn break|open file|long diagonal/.test(f)) return 'Open lines for your pieces: rooks love open files, bishops love long diagonals.';
+  if (/fork|pin|wins|attacks/.test(f)) return 'Checks, captures and threats first — tactics decide games.';
+  return moveNo <= 12 ? 'Compare two or three candidate moves before you play — the best players always do.' : 'Improve your worst piece and keep everything protected.';
+}
+
+/**
+ * Explains a move the way a strong coach would, using Stockfish's top lines
+ * from the position BEFORE the move (side to move = the player).
+ */
+export function coachView(fen: string, chosenUci: string, lines: EngineLine[]): CoachView {
+  const top = lines.filter((l) => l.uci[0]).slice(0, 3);
+  // Always show YOUR move next to the engine's top choices.
+  const yours = lines.find((l) => l.uci[0] === chosenUci);
+  if (yours && !top.includes(yours)) top.push(yours);
+  const candidates: CandidateView[] = top
+    .map((l) => {
+      const d = describeMove(fen, l.uci[0], 'you', l.uci);
+      return {
+        uci: l.uci[0],
+        san: d.san,
+        eval: evalWords(l),
+        reason: d.facts[0] ?? '',
+        line: numberedLine(fen, l.uci, 6),
+        chosen: l.uci[0] === chosenUci,
+      };
+    });
+  const chosenLine = lines.find((l) => l.uci[0] === chosenUci);
+  const d = describeMove(fen, chosenUci, 'you', chosenLine?.uci ?? []);
+  const plan: string[] = [`**${d.san}**: ${d.facts.join(' ')}`];
+  if (chosenLine && chosenLine.uci.length >= 3) {
+    const san = lineToSan(fen, chosenLine.uci, 3);
+    plan.push(`Stockfish's plan: after ${san[0]} ${san[1]}, you follow up with ${san[2]}.`);
+  }
+  const best = lines[0];
+  if (best && best.uci[0] !== chosenUci && chosenLine) {
+    const gap = Math.round(winPercent(best) - winPercent(chosenLine));
+    if (gap <= 1) plan.push(`${candidates[0]?.san} is just as good. When two moves are equal, play the one you know best.`);
+    else plan.push(`${candidates[0]?.san} is a little stronger (about ${gap}% better chances), but ${d.san} is your style and still a good move.`);
+  }
+  return { summary: positionSummary(fen), candidates, plan, lesson: lessonFor(fen, d.facts) };
 }

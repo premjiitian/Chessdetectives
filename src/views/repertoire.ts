@@ -2,12 +2,12 @@
 // moves, explained by Professor Pin, and practised move by move.
 
 import { app } from '../lib/app';
-import { describeMove, evalWords } from '../lib/coach';
+import { coachView, describeMove } from '../lib/coach';
 import { getEngine } from '../lib/engine';
 import { winPercent } from '../lib/evaluation';
 import { allLines, buildRepertoire, countMoves, type RepMove, type Repertoire } from '../lib/repertoire';
 import * as store from '../lib/store';
-import { shuffle } from '../lib/training';
+import { getNote, noteKey, setNote, shuffle } from '../lib/training';
 import type { Color } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, esc, md, toast } from '../ui/dom';
@@ -31,6 +31,7 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
   let board: Board | null = null;
   let destroyed = false;
   let rep: Repertoire | undefined;
+  let offKeys = () => {};
 
   const header = (extra = '') => `
     <section class="dash-head">
@@ -129,7 +130,23 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
     board = new Board($(view, '#board'), { fen: r.root.fen, orientation: color, interactive: false });
     const note = $(view, '.rep-note');
     const evalbar = $(view, '.evalbar');
-    const show = (line: RepMove[], k: number) => {
+    let showToken = 0;
+    let cur: { line: RepMove[]; k: number } | null = null;
+    const step = (d: number) => {
+      if (!cur) return show(lines[0], 0);
+      const k = cur.k + d;
+      if (k >= 0 && k < cur.line.length) show(cur.line, k);
+    };
+    // ← → keys step through the line (but not while typing a note).
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight') step(1);
+      if (e.key === 'ArrowLeft') step(-1);
+    };
+    window.addEventListener('keydown', onKey);
+    offKeys = () => window.removeEventListener('keydown', onKey);
+    const show = async (line: RepMove[], k: number) => {
+      const token = ++showToken;
       const m = line[k];
       const before = k ? line[k - 1].fen : r.root.fen;
       board!.setPosition(m.fen, [m.uci.slice(0, 2), m.uci.slice(2, 4)]);
@@ -137,21 +154,102 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
       view.querySelector(`.mv[data-line="${lines.indexOf(line)}"][data-k="${k}"]`)?.classList.add('on');
       (view.querySelector('[data-play]') as HTMLAnchorElement).href = `#/play?fen=${encodeURIComponent(m.fen)}&color=${color}`;
       const mine = m.kind === 'yours' || m.kind === 'upgrade' || m.kind === 'engine';
-      const facts = mine ? describeMove(before, m.uci, 'you', m.evalLine?.uci ?? []).facts : describeMove(before, m.uci, 'opponent').facts;
-      let html = `<div class="case-top"><span class="rk ${KIND[m.kind].cls}">${KIND[m.kind].badge}</span><b>${moveNo(m)} ${esc(m.san)}</b>${m.opening && m.ply >= 4 ? ` <span class="sub">· ${esc(m.opening)}</span>` : ''}</div>`;
+      cur = { line, k };
+      let html = `<div class="step-nav"><button class="btn small" data-step="-1" ${k === 0 ? 'disabled' : ''} aria-label="Previous move">◀ Prev</button><span class="sub">move ${k + 1} of ${line.length}</span><button class="btn small" data-step="1" ${k + 1 >= line.length ? 'disabled' : ''} aria-label="Next move">Next ▶</button></div>
+      <div class="case-top"><span class="rk ${KIND[m.kind].cls}">${KIND[m.kind].badge}</span><b>${moveNo(m)} ${esc(m.san)}</b>${m.opening && m.ply >= 4 ? ` <span class="sub">· ${esc(m.opening)}</span>` : ''}</div>`;
       if (m.kind === 'yours') html += `<p>You played this <b>${m.count}×</b>${m.score !== null ? ` and scored <b>${pct(m.score)}</b>` : ''}. Stockfish agrees it's a good move — keep it!</p>`;
       if (m.kind === 'upgrade' && m.usual)
         html += `<p>You usually play <b>${esc(m.usual.san)}</b> here (${m.usual.count}×${m.usual.score !== null ? `, scoring ${pct(m.usual.score)}` : ''}). <b>${esc(m.san)}</b> is stronger: about ${m.bestWin}% winning chances instead of ${m.usual.win}%.</p>`;
       if (m.kind === 'engine') html += `<p>Your games don't reach this position yet, so here is Stockfish's choice to be ready.</p>`;
       if (m.kind === 'reply') html += `<p>Your opponents played this <b>${m.count}×</b>${m.score !== null ? ` — you scored ${pct(m.score)} in those games` : ''}. Be ready for it.</p>`;
       if (m.kind === 'engine-reply') html += `<p>Stockfish's most testing reply — prepare for it even if you haven't met it yet.</p>`;
-      if (facts.length) html += `<p>${md(`**Why:** ${facts.join(' ')}`)}</p>`;
-      if (mine && m.evalLine) {
-        html += `<p class="eval-line">📊 After this move: ${esc(evalWords(m.evalLine))}.</p>`;
-        (evalbar.querySelector('i') as HTMLElement).style.height = `${winPercent(m.evalLine)}%`;
+      if (!mine) {
+        const why = describeMove(before, m.uci, 'opponent').facts;
+        if (why.length) html += `<p>${md(`**What it wants:** ${why.join(' ')}`)}</p>`;
       }
+      // The engine-coach part: for your move, the position before it; for their move, how you answer.
+      const pos = mine ? before : m.fen;
+      const answer = mine ? m : m.children[0];
+      html += `<div class="coach-view" aria-live="polite"><p class="sub">🕵️ Professor Pin is asking Stockfish…</p></div>`;
+      const key = noteKey(color, before, m.uci);
+      html += `<div class="my-note"><label for="rep-note">📝 My notes on ${esc(m.san)} <span class="sub">(saved in your profile)</span></label>
+        <textarea id="rep-note" maxlength="2000" rows="3" placeholder="Your own reminder, e.g. “If they play Qb6, defend b2 with Qd2.”">${esc(getNote(app.progress, key))}</textarea>
+        <span class="sub note-status" aria-live="polite"></span></div>`;
       note.innerHTML = html;
+      note.querySelectorAll<HTMLButtonElement>('[data-step]').forEach((b) => b.addEventListener('click', () => step(+b.dataset.step!)));
+      wireNote(key, line, k);
+      if (mine && m.evalLine) (evalbar.querySelector('i') as HTMLElement).style.height = `${winPercent(m.evalLine)}%`;
+
+      let cands = answer?.candidates;
+      if (!cands?.length) {
+        const r2 = await getEngine().search(pos, { depth: 14, multipv: 3 }).catch(() => null);
+        if (token !== showToken || destroyed) return;
+        cands = r2?.lines ?? [];
+        if (answer && cands.length) {
+          answer.candidates = cands.map((l) => ({ ...l, uci: l.uci.slice(0, 8) }));
+          store.set(repKey(color), r).catch(() => {});
+        }
+      }
+      if (token !== showToken || destroyed) return;
+      const chosen = answer?.uci ?? cands[0]?.uci[0] ?? '';
+      // Your repertoire move may be outside Stockfish's top 3: add its own line.
+      if (answer?.evalLine && !cands.some((l) => l.uci[0] === chosen)) cands = [...cands, answer.evalLine];
+      const cv = coachView(pos, chosen, cands);
+      const box = view.querySelector('.coach-view');
+      if (!box) return;
+      box.innerHTML = `
+        <h4>🧭 ${mine ? 'The position before your move' : 'The position now — your move'}</h4>
+        <ul class="cv-summary">${cv.summary.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+        <h4>🔍 Candidate moves (Stockfish 19)</h4>
+        <ol class="cv-cands">${cv.candidates
+          .map(
+            (c) => `<li class="${c.chosen ? 'chosen' : ''}"><div><b>${esc(c.san)}</b> <span class="sub">${esc(c.eval)}</span>${c.chosen ? ' <span class="rk yours">your repertoire</span>' : ''}</div>
+            ${c.reason ? `<div>${md(c.reason)}</div>` : ''}<div class="sub cv-line">${esc(c.line)}</div></li>`,
+          )
+          .join('')}</ol>
+        <h4>🎯 The plan</h4>
+        ${cv.plan.map((x) => `<p>${md(x)}</p>`).join('')}
+        <p class="cv-lesson">🗝️ <b>Key lesson:</b> ${esc(cv.lesson)}</p>`;
     };
+
+    const wireNote = (key: string, line: RepMove[], k: number) => {
+      const ta = view.querySelector<HTMLTextAreaElement>('#rep-note');
+      const status = view.querySelector<HTMLElement>('.note-status');
+      if (!ta || !app.progress) return;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const save = async () => {
+        if (!app.progress) return;
+        setNote(app.progress, key, ta.value);
+        await app.saveProgress();
+        if (status) status.textContent = ta.value.trim() ? 'Saved ✓' : 'Note removed';
+        view.querySelector(`.mv[data-line="${lines.indexOf(line)}"][data-k="${k}"]`)?.classList.toggle('has-note', !!ta.value.trim());
+        markNotes();
+      };
+      ta.addEventListener('input', () => {
+        if (status) status.textContent = 'Saving…';
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(save, 600);
+      });
+      ta.addEventListener('blur', () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+          save();
+        }
+      });
+    };
+
+    /** 📝 marker on every move that has a note. */
+    const markNotes = () =>
+      view.querySelectorAll<HTMLButtonElement>('.mv').forEach((b) => {
+        const line = lines[+b.dataset.line!];
+        const k = +b.dataset.k!;
+        const before = k ? line[k - 1].fen : r.root.fen;
+        b.classList.toggle('has-note', !!getNote(app.progress, noteKey(color, before, line[k].uci)).trim());
+      });
+    markNotes();
+    if (lines[0]) show(lines[0], 0);
+
     view.querySelectorAll<HTMLButtonElement>('.mv').forEach((b) => b.addEventListener('click', () => show(lines[+b.dataset.line!], +b.dataset.k!)));
     view.querySelector('[data-rebuild]')!.addEventListener('click', async () => {
       await store.del(repKey(color));
@@ -229,7 +327,9 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
         board.play(m.uci);
         total++;
         if (firstTry) correct++;
-        say(`<p>✅ <b>${esc(m.san)}</b> — ${m.kind === 'yours' ? 'your move, well remembered!' : m.kind === 'upgrade' ? 'the upgrade — great!' : 'right, the prepared move.'}</p>`, 'good');
+        const before = k ? lines[li][k - 1].fen : r.root.fen;
+        const mine = getNote(app.progress, noteKey(color, before, m.uci)).trim();
+        say(`<p>✅ <b>${esc(m.san)}</b> — ${m.kind === 'yours' ? 'your move, well remembered!' : m.kind === 'upgrade' ? 'the upgrade — great!' : 'right, the prepared move.'}</p>${mine ? `<p class="your-note">📝 Your note: ${esc(mine)}</p>` : ''}`, 'good');
         k++;
         step();
       } else {
@@ -279,6 +379,7 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
   start();
   return () => {
     destroyed = true;
+    offKeys();
     stopVoice();
     board?.destroy();
   };

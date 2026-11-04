@@ -1,6 +1,7 @@
 // Loop 14: after one visit, puzzles and Stockfish work with no internet.
 //   FIXTURES=/path FIXTURE_USER=name node tests/offline.mjs
 import { createRequire } from 'node:module';
+import { waitStep } from './helpers.mjs';
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -54,7 +55,7 @@ await page.waitForSelector('.dash-head');
 await page.waitForFunction(() => /games analyzed/.test(document.querySelector('.status')?.textContent ?? '') && !document.querySelector('.status .spin'), null, { timeout: 600000 });
 await page.goto(`http://localhost:${port}/#/train`);
 await page.waitForSelector('.trainer .case-head h2');
-await page.waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => !!s.best), null, { timeout: 60000 });
+await waitStep(page, (s) => !!s.best, 60000);
 const swReady = await page.evaluate(async () => !!(await navigator.serviceWorker?.ready));
 check('offline helper is installed after the first visit', swReady);
 // Give it a moment to save files, then report what is saved.
@@ -85,10 +86,7 @@ check('the app opens with no internet', loaded);
 await page.goto(`http://localhost:${port}/#/train`);
 const puzzle = await page.waitForSelector('.trainer .case-head h2', { timeout: 15000 }).then(() => true).catch(() => false);
 check('puzzles from analyzed games open offline', puzzle);
-const engineOk = await page
-  .waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => !!s.best), null, { timeout: 60000 })
-  .then(() => true)
-  .catch(() => false);
+const engineOk = !!(await waitStep(page, (s) => !!s.best, 60000));
 check('Stockfish works offline', engineOk);
 await page.goto(`http://localhost:${port}/#/dashboard`);
 await page.waitForTimeout(3000);

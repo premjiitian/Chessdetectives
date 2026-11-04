@@ -94,7 +94,12 @@ for (const [label, dev] of profiles) {
   check('trainer fits the screen', await noSideScroll());
 
   // Tap-to-move: tap one of your pieces, then a legal square.
-  await page.waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => s.interactive), null, { timeout: 60000 }).catch(() => {});
+  // Poll properly (a returned Promise would count as "true" immediately).
+  for (let i = 0; i < 300; i++) {
+    const s = await page.evaluate(() => window.__cdStep?.());
+    if (s?.interactive) break;
+    await page.waitForTimeout(200);
+  }
   const st = await page.evaluate(() => window.__cdStep());
   const color = (await page.evaluate(() => window.__cd())).color;
   const uci = st.legal[0];

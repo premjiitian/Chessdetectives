@@ -26,7 +26,25 @@ export interface Progress {
   badges: string[];
   chapters?: number[]; // episodes watched
   log?: XpEntry[]; // every puzzle you finished, newest last
+  notes?: Record<string, Note>; // your own comments (repertoire moves), saved in your profile
 }
+
+export interface Note {
+  text: string;
+  t: number; // last edited (ms)
+}
+
+/** Same position + same move = same note, whatever the move order that got there. */
+export const noteKey = (color: string, fenBefore: string, uci: string) => `rep:${color}:${fenBefore.split(' ').slice(0, 4).join(' ')}:${uci}`;
+
+export function setNote(p: Progress, key: string, text: string, now = Date.now()) {
+  p.notes ??= {};
+  const clean = text.slice(0, 2000);
+  if (clean.trim()) p.notes[key] = { text: clean, t: now };
+  else if (p.notes[key]) p.notes[key] = { text: '', t: now }; // keep a deletion marker so other devices learn about it
+}
+
+export const getNote = (p: Progress | null | undefined, key: string) => p?.notes?.[key]?.text ?? '';
 
 export interface XpEntry {
   t: number; // when (ms)

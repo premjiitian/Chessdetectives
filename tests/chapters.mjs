@@ -1,6 +1,7 @@
 // Loop 6: the Chapters (video course) journey in a real browser.
 //   FIXTURES=/path FIXTURE_USER=name node tests/chapters.mjs
 import { createRequire } from 'node:module';
+import { waitStep } from './helpers.mjs';
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -92,7 +93,7 @@ if (startBtn) {
   await startBtn.click();
   await page.waitForSelector('.trainer .case-head h2');
   check('practice session says which chapter it is', /Chapter \d+ practice/.test(await page.textContent('.case-no')));
-  await page.waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => s.interactive), null, { timeout: 60000 }).catch(() => {});
+  await waitStep(page, (s) => s.interactive, 60000);
   await page.waitForTimeout(3000);
   await page.click('[data-act=solution]');
   await page.waitForSelector('.stamp', { timeout: 60000 }).catch(() => {});
