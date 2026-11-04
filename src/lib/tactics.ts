@@ -218,3 +218,21 @@ export function threatsAgainst(fen: string, theirMoveAlready = false): { san: st
   // Mates first, then the most valuable captures.
   return out.sort((a, b) => (a.kind === 'mate' ? -100 : -VALUE[a.target!]) - (b.kind === 'mate' ? -100 : -VALUE[b.target!]));
 }
+
+/**
+ * Material that STAYS won for `pov` along a line: after each of the
+ * opponent's replies we take a reading, and keep the smallest one. A piece
+ * grabbed mid-exchange and given back two moves later doesn't count.
+ */
+export function settledSwing(fen: string, line: string[], pov: Side, plies = 10): number {
+  const c = new Chess(fen);
+  const start = material(c, pov) - material(c, other(pov));
+  const readings: number[] = [];
+  for (let i = 0; i < Math.min(plies, line.length); i++) {
+    if (!play(c, line[i])) break;
+    if (c.turn() === pov && i >= 1) readings.push(material(c, pov) - material(c, other(pov)) - start);
+  }
+  if (!readings.length) return materialSwing(fen, line, pov, plies);
+  // Ignore the very last reading if it's mid-trade (the line may stop early).
+  return Math.min(...readings.slice(-3));
+}
