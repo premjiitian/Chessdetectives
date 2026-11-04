@@ -26,6 +26,10 @@ const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } })
 const page = await ctx.newPage();
 // Headless Chromium has no voices: record what the voice coach would say.
 await page.addInitScript(() => {
+  // The natural (neural) voice is checked separately; use the instant device voice here.
+  try {
+    if (!localStorage.getItem('voice-settings')) localStorage.setItem('voice-settings', JSON.stringify({ engine: 'device' }));
+  } catch {}
   window.__spoken = [];
   const fake = {
     speak: (u) => window.__spoken.push(u.text),

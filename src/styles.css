@@ -279,6 +279,7 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .res.loss { color: var(--bad); }
 .voice-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .voice-more { position: relative; }
+.v-status { font-size: 0.82em; }
 .voice-more summary { list-style: none; cursor: pointer; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
 .voice-more summary::-webkit-details-marker { display: none; }
 .voice-more[open] { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
