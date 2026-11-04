@@ -3,6 +3,7 @@
 //   FIXTURES=/path/to/folder npm run e2e
 // The folder needs archives.json, profile.json and YYYY-MM.json files.
 import { createRequire } from 'node:module';
+import { waitStep } from './helpers.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright'); // pre-installed or `npm i -D playwright`
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -140,7 +141,7 @@ if (current) {
   await page.waitForSelector('.msg.bad', { timeout: 30000 });
   await page.waitForTimeout(1200);
   await shot('05-train-wrong');
-  await page.waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => s.interactive), null, { timeout: 15000 }).catch(() => {});
+  await waitStep(page, (s) => s.interactive, 15000);
   step('hint x2');
   await page.click('[data-act=hint]');
   await page.click('[data-act=hint]');

@@ -25,6 +25,7 @@ const steps = [
   { name: 'Safety + saved progress', cmd: 'node tests/safety.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Offline (no internet)', cmd: 'node tests/offline.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Professor Pin voice', cmd: 'node tests/voice.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
+  { name: 'Repertoire (build, browse, practise)', cmd: 'node tests/repertoire.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Walkthrough + screenshots', cmd: 'node tests/e2e.mjs', browser: true, metric: /(No console errors\.)/ },
 ];
 

@@ -144,5 +144,14 @@ export function mergeProgress(a: Progress, b: Progress | undefined): Progress {
     badges: [...new Set([...(a.badges ?? []), ...(b.badges ?? [])])],
     chapters: [...new Set([...(a.chapters ?? []), ...(b.chapters ?? [])])].sort((x, y) => x - y),
     log,
+    notes: mergeNotes(a.notes, b.notes),
   };
+}
+
+/** Notes: for each move, the most recently edited version wins (also deletions). */
+function mergeNotes(a?: Progress['notes'], b?: Progress['notes']): Progress['notes'] {
+  if (!a && !b) return undefined;
+  const out = { ...(b ?? {}) };
+  for (const [k, n] of Object.entries(a ?? {})) if (!out[k] || n.t >= out[k].t) out[k] = n;
+  return out;
 }

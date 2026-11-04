@@ -335,3 +335,60 @@ describe('progress sync between devices', () => {
     expect(mergeProgress(m, m).log).toHaveLength(2); // syncing twice changes nothing
   });
 });
+
+describe('coach truthfulness in the opening', () => {
+  it('does not call an early pawn move a king escape square', () => {
+    const facts = describeMove('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1', 'd7d6').facts.join(' ');
+    expect(facts).not.toMatch(/escape square/);
+  });
+  it('still spots a real escape square for a castled king later on', () => {
+    const facts = describeMove('6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 30', 'h2h3').facts.join(' ');
+    expect(facts).toMatch(/escape square/);
+  });
+});
+
+import { coachView, positionSummary } from '../src/lib/coach';
+import { noteKey, setNote, getNote } from '../src/lib/training';
+describe('grandmaster-coach panel', () => {
+  const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const lines = [
+    { uci: ['e2e4', 'e7e5', 'g1f3'], cp: 35, mate: null, depth: 14 },
+    { uci: ['d2d4', 'd7d5', 'c2c4'], cp: 30, mate: null, depth: 14 },
+    { uci: ['g1f3', 'd7d5', 'd2d4'], cp: 25, mate: null, depth: 14 },
+  ];
+  it('summarises the position honestly', () => {
+    const s = positionSummary(start).join(' ');
+    expect(s).toMatch(/Material is equal/);
+    expect(s).toMatch(/0 of 4 knights and bishops out, your opponent 0/);
+    expect(s).toMatch(/still in the center/);
+  });
+  it('lists candidates best-first with evaluation, reason and line; marks your move', () => {
+    const v = coachView(start, 'd2d4', lines);
+    expect(v.candidates.map((c) => c.san)).toEqual(['e4', 'd4', 'Nf3']);
+    expect(v.candidates.find((c) => c.chosen)?.san).toBe('d4');
+    expect(v.candidates[0].eval).toMatch(/\+0\.3|\+0\.4/);
+    expect(v.candidates[0].line).toBe('1.e4 e5 2.Nf3');
+    expect(v.plan.join(' ')).toMatch(/Stockfish's plan: after d4 d5, you follow up with c4/);
+    expect(v.plan.join(' ')).toMatch(/e4 is just as good/);
+    const clearlyWorse = coachView(start, 'g1f3', [lines[0], lines[1], { ...lines[2], cp: -60 }]);
+    expect(clearlyWorse.plan.join(' ')).toMatch(/e4 is a little stronger \(about \d+% better chances\)/);
+    expect(v.lesson.length).toBeGreaterThan(10);
+  });
+  it('always shows your own move, even outside the top 3', () => {
+    const v = coachView(start, 'b2b3', [...lines, { uci: ['b2b3', 'e7e5'], cp: 0, mate: null, depth: 14 }]);
+    expect(v.candidates.map((c) => c.san)).toEqual(['e4', 'd4', 'Nf3', 'b3']);
+    expect(v.candidates.find((c) => c.chosen)?.san).toBe('b3');
+  });
+  it('notes are saved per position + move, and deletions sync too', () => {
+    const p = emptyProgress('kid');
+    const k = noteKey('white', start, 'e2e4');
+    setNote(p, k, 'My favourite!', 1);
+    expect(getNote(p, k)).toBe('My favourite!');
+    // Same position reached by another move order (different counters) -> same note.
+    expect(noteKey('white', start.replace(' 0 1', ' 4 9'), 'e2e4')).toBe(k);
+    const other = { ...emptyProgress('kid'), notes: { [k]: { text: '', t: 5 } } } as any; // deleted later on another device
+    expect(getNote(mergeProgress(p, other), k)).toBe('');
+    const newer = { ...emptyProgress('kid'), notes: { [k]: { text: 'Old idea', t: 0 } } } as any;
+    expect(getNote(mergeProgress(p, newer), k)).toBe('My favourite!');
+  });
+});
