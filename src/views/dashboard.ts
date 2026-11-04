@@ -1,6 +1,7 @@
 import { app, LIVE_TIME_CLASSES, PERIODS, TIME_CLASSES, type PeriodId } from '../lib/app';
 import { headline, periodStats } from '../lib/stats';
 import { THEMES } from '../lib/themes';
+import { recommendChapter, thumb } from '../lib/chapters';
 import { buildSession } from '../lib/training';
 import { esc, toast } from '../ui/dom';
 
@@ -63,7 +64,13 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
         </div>
         <span class="btn primary">${session.length ? 'Start training →' : 'Waiting for clues'}</span>
       </a>
-      <div class="card coach-note">
+      ${(() => {
+        const rec = recommendChapter(app.mistakes(d), app.progress?.chapters ?? []);
+        return rec
+          ? `<a class="card coach-note rec-mini" href="#/chapters/${rec.ep}"><img src="${thumb(rec.videoId)}" alt="" loading="lazy" /><div><h3>🕵️ Professor Pin's note</h3><p>${s.themes[0] ? esc(THEMES[s.themes[0].id].lesson) : 'The fastest way to improve is to stop repeating the same mistake.'}</p><p class="rec-line">📺 Watch <b>Ep ${rec.ep}: ${esc(rec.title)}</b>, then practise it on your games →</p></div></a>`
+          : '';
+      })()}
+      <div class="card coach-note" hidden>
         <div class="coach-face">🕵️</div>
         <div>
           <h3>Professor Pin's note</h3>

@@ -9,6 +9,7 @@ import { flip, formatEval, winPercent } from '../lib/evaluation';
 import { THEMES } from '../lib/themes';
 import { sanOf } from '../lib/tactics';
 import { difficultyOf } from '../lib/difficulty';
+import { CHAPTERS, chapterByEp, practiceFor, thumb } from '../lib/chapters';
 import { buildSession, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
 import type { EngineLine, MistakeRecord, ThemeId } from '../lib/types';
 import { Board } from '../ui/board';
@@ -27,7 +28,14 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const m = app.findMistake(id);
     queue = m ? [m] : [];
   } else {
-    queue = buildSession(p, all, 6, Date.now(), theme ?? undefined);
+    const chapter = params.get('chapter') ? chapterByEp(Number(params.get('chapter'))) : undefined;
+    queue = chapter
+      ? (() => {
+          const pool = practiceFor(chapter, all);
+          const due = pool.filter((m) => !p.cards[m.id] || p.cards[m.id].due <= Date.now());
+          return (due.length ? due : pool).slice(0, 6);
+        })()
+      : buildSession(p, all, 6, Date.now(), theme ?? undefined);
   }
 
   if (!queue.length) {
@@ -178,7 +186,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const card = p.cards[m.id];
     head.innerHTML = `
       <div class="case-top">
-        <span class="case-no">Case ${i + 1}/${queue.length}</span>
+        <span class="case-no">${params.get('chapter') ? `📺 Chapter ${params.get('chapter')} practice · ` : ''}Case ${i + 1}/${queue.length}</span>
         <span class="sev ${m.severity}">${m.severity}</span>
         ${card?.attempts ? `<span class="review">↻ review</span>` : '<span class="new">new</span>'}
       </div>
@@ -454,7 +462,15 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
        <p>Best line: ${esc(solvedLine)}</p>`,
       'lesson',
     );
-    say(`<h4>${info.icon} Key lesson: ${esc(info.title)}</h4><p>${esc(info.lesson)}</p>`, 'lesson');
+    const lesson = say(`<h4>${info.icon} Key lesson: ${esc(info.title)}</h4><p>${esc(info.lesson)}</p>`, 'lesson');
+    const ch = CHAPTERS.find((c) => c.themes[0] === m.theme) ?? CHAPTERS.find((c) => c.themes.length < 6 && c.themes.includes(m.theme));
+    if (ch) {
+      const a = document.createElement('a');
+      a.className = 'learn-more';
+      a.href = `#/chapters/${ch.ep}`;
+      a.innerHTML = `<img src="${thumb(ch.videoId)}" alt="" loading="lazy" /><span>📺 <b>Learn more:</b> Ep ${ch.ep} · ${esc(ch.title)}</span>`;
+      lesson.append(a);
+    }
     say(
       `<p>Want to prove it? Play this position out against Stockfish.</p><a class="btn small" href="#/play?fen=${encodeURIComponent(m.fenBefore)}&color=${m.userColor}">♟️ Play it out vs Stockfish</a>`,
       'coach',

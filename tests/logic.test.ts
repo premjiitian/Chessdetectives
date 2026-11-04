@@ -200,3 +200,25 @@ describe('game-type filter', () => {
     expect(app.mistakes()).toHaveLength(2);
   });
 });
+
+import { CHAPTERS, PARTS, practiceFor, recommendChapter, chapterByEp } from '../src/lib/chapters';
+describe('chapters', () => {
+  const mk = (id: string, theme: any, extra: any = {}) => ({ id, theme, severity: 'mistake', endTime: 1, winBefore: 50, phase: 'middlegame', timePressure: false, ...extra }) as any;
+  it('has all 20 episodes in 5 parts, each with a video', () => {
+    expect(CHAPTERS.map((c) => c.ep)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+    expect(PARTS.flatMap((p) => p.chapters).sort((a, b) => a - b)).toEqual(CHAPTERS.map((c) => c.ep));
+    for (const c of CHAPTERS) expect(c.videoId).toMatch(/^[\w-]{11}$/);
+  });
+  it('picks your own positions for a chapter', () => {
+    const ms = [mk('a', 'missed-fork'), mk('b', 'hung-piece'), mk('c', 'endgame-technique', { phase: 'endgame' })];
+    expect(practiceFor(chapterByEp(8)!, ms).map((m) => m.id).sort()).toEqual(['a', 'b']);
+    expect(practiceFor(chapterByEp(18)!, ms).map((m) => m.id)).toEqual(['c']);
+    expect(practiceFor(chapterByEp(16)!, [mk('w', 'hung-piece', { winBefore: 80 }), mk('l', 'hung-piece', { winBefore: 30 })]).map((m) => m.id)).toEqual(['w']);
+  });
+  it('recommends the chapter for your most common mistake, skipping watched ones', () => {
+    const ms = [mk('1', 'missed-mate'), mk('2', 'missed-mate'), mk('3', 'hung-piece')];
+    expect(recommendChapter(ms)?.ep).toBe(9);
+    expect(recommendChapter(ms, [9])?.ep).not.toBe(9);
+    expect(recommendChapter([])?.ep).toBe(1);
+  });
+});

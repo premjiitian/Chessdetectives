@@ -10,6 +10,7 @@ import { renderTrain } from './views/train';
 import { renderCases } from './views/cases';
 import { renderPlay } from './views/play';
 import { renderProgress } from './views/progress';
+import { renderChapters } from './views/chapters';
 
 export type Cleanup = (() => void) | void;
 const root = document.getElementById('app')!;
@@ -25,6 +26,7 @@ function shell(active: string) {
       <a class="brand" href="#/dashboard"><span class="logo">🔍</span><span>Chess<b>Detectives</b></span></a>
       <nav>
         ${link('dashboard', 'Dashboard', '📊')}
+        ${link('chapters', 'Chapters', '📺')}
         ${link('train', 'Train', '🧩')}
         ${link('cases', 'Case files', '🗂️')}
         ${link('play', 'Spar', '♟️')}
@@ -69,6 +71,9 @@ async function route() {
       break;
     case 'play':
       cleanup = renderPlay(view, params);
+      break;
+    case 'chapters':
+      cleanup = renderChapters(view, rest[0] ? Number(rest[0]) : undefined);
       break;
     case 'progress':
       cleanup = renderProgress(view);

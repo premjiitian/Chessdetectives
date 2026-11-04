@@ -24,6 +24,7 @@ export interface Progress {
   themes: Partial<Record<ThemeId, { attempts: number; clean: number }>>;
   cards: Record<string, CardState>;
   badges: string[];
+  chapters?: number[]; // episodes watched
 }
 
 const INTERVAL_DAYS = [0, 1, 3, 7, 14, 30, 60];
@@ -47,6 +48,8 @@ export const BADGES: Record<string, { title: string; icon: string; desc: string 
   'fork-master': { title: 'Fork Master', icon: '🍴', desc: 'Solved 3 fork puzzles cleanly.' },
   'blunder-buster': { title: 'Blunder Buster', icon: '🛡️', desc: 'Solved 10 of your blunders.' },
   'fifty': { title: 'Case Hardened', icon: '🗂️', desc: 'Solved 50 puzzles.' },
+  'student': { title: 'Star Student', icon: '📺', desc: 'Watched 5 chapters of the course.' },
+  'graduate': { title: 'Graduate Detective', icon: '🎓', desc: 'Watched all 20 chapters.' },
 };
 
 export function rankOf(xp: number) {
@@ -119,7 +122,7 @@ export function recordResult(p: Progress, m: MistakeRecord, result: 'clean' | 'h
   return { xp, newBadges, rankUp: rankOf(p.xp).index > rankBefore };
 }
 
-function checkBadges(p: Progress): string[] {
+export function checkBadges(p: Progress): string[] {
   const cards = Object.values(p.cards);
   const solved = cards.reduce((a, c) => a + (c.solved ? 1 : 0), 0);
   const clean = Object.values(p.themes).reduce((a, t) => a + (t?.clean ?? 0), 0);
@@ -137,6 +140,8 @@ function checkBadges(p: Progress): string[] {
   give('mate-hunter', (p.themes['missed-mate']?.clean ?? 0) >= 3);
   give('fork-master', (p.themes['missed-fork']?.clean ?? 0) + (p.themes['allowed-fork']?.clean ?? 0) >= 3);
   give('fifty', solved >= 50);
+  give('student', (p.chapters?.length ?? 0) >= 5);
+  give('graduate', (p.chapters?.length ?? 0) >= 20);
   return earned;
 }
 
