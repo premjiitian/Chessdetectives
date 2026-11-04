@@ -1,0 +1,202 @@
+import { app, PERIODS, type PeriodId } from '../lib/app';
+import { headline, periodStats } from '../lib/stats';
+import { THEMES } from '../lib/themes';
+import { buildSession } from '../lib/training';
+import { esc, toast } from '../ui/dom';
+
+let period: PeriodId = '30d';
+try {
+  period = (localStorage.getItem('period') as PeriodId) || '30d';
+} catch {}
+
+export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
+  let sig = '';
+  const days = () => PERIODS.find((p) => p.id === period)!.days;
+
+  const render = () => {
+    const d = days();
+    const games = app.gamesIn(d);
+    const prev = period === '3y' ? null : app.gamesIn(d, d);
+    const s = periodStats(games, prev, app.analyses);
+    const allMistakes = app.mistakes();
+    const session = app.progress ? buildSession(app.progress, allMistakes) : [];
+    const due = app.progress ? allMistakes.filter((m) => app.progress!.cards[m.id] && app.progress!.cards[m.id].due <= Date.now()).length : 0;
+    const pending = games.filter((g) => !app.analyses.has(g.id)).length;
+    const maxTheme = Math.max(1, ...s.themes.map((t) => t.count));
+    const totalPhase = Math.max(1, s.phases.opening + s.phases.middlegame + s.phases.endgame);
+    const name = app.profile?.name?.split(' ')[0] || app.profile?.username || app.username;
+    const pct = (n: number) => Math.round(n * 100);
+
+    view.innerHTML = `
+    <section class="dash-head">
+      <div>
+        <h1>Welcome back, ${esc(name)} 👋</h1>
+        <p class="headline">${esc(headline(s))}</p>
+      </div>
+      <div class="tabs" role="tablist">
+        ${PERIODS.map((p) => `<button role="tab" data-period="${p.id}" class="${p.id === period ? 'on' : ''}">${p.label}</button>`).join('')}
+      </div>
+    </section>
+
+    <section class="status card">
+      ${statusHtml(games.length, s.analyzed, pending)}
+    </section>
+
+    <section class="grid-2">
+      <a class="card cta" href="#/train">
+        <div class="cta-ico">🧩</div>
+        <div>
+          <h2>Today's case files</h2>
+          <p>${session.length ? `${session.length} puzzles from your own games are waiting${due ? ` · ${due} review${due > 1 ? 's' : ''} due` : ''}.` : 'Analyze a few games to unlock your personal puzzles.'}</p>
+        </div>
+        <span class="btn primary">${session.length ? 'Start training →' : 'Waiting for clues'}</span>
+      </a>
+      <div class="card coach-note">
+        <div class="coach-face">🧑‍🏫</div>
+        <div>
+          <h3>Coach's note</h3>
+          <p>${s.themes[0] ? esc(THEMES[s.themes[0].id].lesson) : 'Play, then let us investigate. The fastest way to improve is to stop repeating the same mistake — and you can only fix what you can see.'}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="kpis">
+      ${kpi('Games', String(s.games), `${s.wins}W · ${s.draws}D · ${s.losses}L`)}
+      ${kpi('Accuracy', s.accuracy === null ? '—' : `${s.accuracy}%`, s.analyzed ? `${s.analyzed} games analyzed` : 'not analyzed yet')}
+      ${kpi('Mistakes / game', s.mistakesPerGame === null ? '—' : s.mistakesPerGame.toFixed(1), 'mistakes + blunders')}
+      ${kpi('Blunders / game', s.blundersPerGame === null ? '—' : s.blundersPerGame.toFixed(1), 'big swings (≥20%)')}
+      ${kpi('Rating', s.ratingNow === null ? '—' : String(s.ratingNow), s.ratingChange === null ? '' : `${s.ratingChange >= 0 ? '▲' : '▼'} ${Math.abs(s.ratingChange)} this period`, s.ratingChange !== null && s.ratingChange < 0 ? 'down' : 'up')}
+    </section>
+
+    <section class="grid-main">
+      <div class="card">
+        <h2>Your most frequent mistakes</h2>
+        <p class="sub">What keeps coming back in the last ${esc(PERIODS.find((p) => p.id === period)!.label)}${prev ? ', compared with the period before' : ''}.</p>
+        ${
+          s.themes.length
+            ? `<ol class="themes">${s.themes
+                .map((t) => {
+                  const info = THEMES[t.id];
+                  const trend =
+                    t.prevPerGame === null
+                      ? ''
+                      : t.perGame < t.prevPerGame * 0.9
+                        ? `<span class="trend good" title="per game, vs previous period">▼ improving</span>`
+                        : t.perGame > t.prevPerGame * 1.1
+                          ? `<span class="trend bad" title="per game, vs previous period">▲ more often</span>`
+                          : `<span class="trend">● steady</span>`;
+                  return `<li>
+                    <span class="t-ico">${info.icon}</span>
+                    <div class="t-body">
+                      <div class="t-row"><strong>${esc(info.title)}</strong> ${trend}</div>
+                      <div class="bar"><i style="width:${(t.count / maxTheme) * 100}%"></i></div>
+                      <div class="t-meta">${t.count}× · ${t.perGame.toFixed(2)} per game${t.blunders ? ` · ${t.blunders} blunder${t.blunders > 1 ? 's' : ''}` : ''}</div>
+                    </div>
+                    <a class="btn small" href="#/train?theme=${t.id}">Train</a>
+                  </li>`;
+                })
+                .join('')}</ol>`
+            : `<div class="empty">${s.analyzed ? '🎉 No real mistakes found in this period.' : 'Analyze games to reveal your patterns.'}</div>`
+        }
+      </div>
+      <div class="side">
+        <div class="card">
+          <h2>When do mistakes happen?</h2>
+          ${(['opening', 'middlegame', 'endgame'] as const)
+            .map(
+              (ph) => `<div class="phase"><span>${ph[0].toUpperCase() + ph.slice(1)}</span><div class="bar"><i style="width:${(s.phases[ph] / totalPhase) * 100}%"></i></div><b>${s.phases[ph]}</b></div>`,
+            )
+            .join('')}
+          ${s.analyzed ? `<p class="sub clock">⏱ ${pct(s.timePressure)}% of your mistakes came with less than 10% of your clock left.${s.timePressure > 0.3 ? ' Try a slower time control or move faster in the opening.' : ''}</p>` : ''}
+        </div>
+        <div class="card">
+          <h2>Openings</h2>
+          ${
+            s.openings.length
+              ? `<table class="openings"><thead><tr><th>Opening</th><th>Games</th><th>Score</th></tr></thead><tbody>${s.openings
+                  .map((o) => `<tr><td>${esc(o.name)}</td><td>${o.games}</td><td><span class="score ${o.score >= 0.5 ? 'good' : 'bad'}">${pct(o.score)}%</span></td></tr>`)
+                  .join('')}</tbody></table>`
+              : '<div class="empty">No games yet.</div>'
+          }
+        </div>
+      </div>
+    </section>`;
+
+    view.querySelectorAll<HTMLButtonElement>('[data-period]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        period = b.dataset.period as PeriodId;
+        try {
+          localStorage.setItem('period', period);
+        } catch {}
+        render();
+        try {
+          await app.ensureGames(days());
+        } catch (e) {
+          toast(esc((e as Error).message), 'warn');
+        }
+      }),
+    );
+    view.querySelector('[data-analyze]')?.addEventListener('click', (e) => {
+      const n = Number((e.currentTarget as HTMLElement).dataset.analyze);
+      app.analyze(days(), n);
+    });
+    view.querySelector('[data-stop]')?.addEventListener('click', () => app.stopAnalysis());
+    view.querySelector('[data-sync]')?.addEventListener('click', () => app.ensureGames(days(), true).catch((e) => toast(esc(e.message), 'warn')));
+    view.querySelector<HTMLSelectElement>('[data-depth]')?.addEventListener('change', (e) => app.setDepth(Number((e.target as HTMLSelectElement).value)));
+    sig = signature();
+  };
+
+  const signature = () => `${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? 1 : 0}|${period}|${app.progress?.xp}`;
+
+  const statusHtml = (games: number, analyzed: number, pending: number) => {
+    if (app.fetching) {
+      const f = app.fetching;
+      return `<div class="st-row"><span class="spin"></span><div class="st-text"><b>Collecting evidence from chess.com…</b><span>Month ${f.done} of ${f.total}</span></div><div class="bar wide"><i style="width:${(f.done / Math.max(1, f.total)) * 100}%"></i></div></div>`;
+    }
+    if (app.job) {
+      const j = app.job;
+      const frac = (j.done + (j.plyDone && j.plyTotal ? j.plyDone / j.plyTotal : 0)) / j.total;
+      return `<div class="st-row"><span class="spin"></span><div class="st-text"><b>Stockfish is investigating game ${j.done + 1} of ${j.total}</b><span>${esc(j.current ?? '')} · you can start training already</span></div><div class="bar wide"><i id="job-bar" style="width:${frac * 100}%"></i></div><button class="btn small ghost" data-stop>Pause</button></div>`;
+    }
+    const sync = app.lastSync() ? `Synced ${new Date(app.lastSync()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not synced yet';
+    return `<div class="st-row">
+      <span class="st-ico">${pending ? '🔎' : '✅'}</span>
+      <div class="st-text"><b>${analyzed} of ${games} games analyzed</b><span>${sync} · <a href="javascript:void 0" data-sync>refresh</a></span></div>
+      <label class="depth">Depth <select data-depth>
+        ${[[8, 'Fast'], [10, 'Balanced'], [13, 'Deep']].map(([v, l]) => `<option value="${v}" ${app.depth === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select></label>
+      ${pending ? `<button class="btn primary small" data-analyze="${Math.min(pending, 25)}">Analyze ${Math.min(pending, 25)} more</button>` : ''}
+    </div>`;
+  };
+
+  const off = app.on(() => {
+    if (signature() !== sig) render();
+    else {
+      const bar = document.getElementById('job-bar');
+      const j = app.job;
+      if (bar && j) bar.style.width = `${((j.done + (j.plyDone && j.plyTotal ? j.plyDone / j.plyTotal : 0)) / j.total) * 100}%`;
+    }
+  });
+  render();
+
+  // First visit (or stale data): download games, then analyze the newest ones.
+  (async () => {
+    try {
+      await app.ensureGames(Math.max(120, days()), params.has('first'));
+      if (params.has('first') || app.analyses.size === 0) {
+        if (app.games.length) app.analyze(Math.max(30, days()), 20);
+        else toast('No standard chess games found in the last 120 days. Try a longer period.', 'warn', 6000);
+      }
+    } catch (e) {
+      toast(esc((e as Error).message), 'warn', 6000);
+    }
+  })();
+
+  return () => {
+    off();
+  };
+}
+
+function kpi(label: string, value: string, sub: string, cls = '') {
+  return `<div class="card kpi"><span class="k-label">${esc(label)}</span><span class="k-value">${esc(value)}</span><span class="k-sub ${cls}">${esc(sub)}</span></div>`;
+}
