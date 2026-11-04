@@ -27,6 +27,7 @@ and the Chess Detectives YouTube course as chapters.
 - Safety: data from chess.com is always escaped (`esc()`); `tests/safety.mjs` attacks with hostile names.
 - Coaching is truthful (labels match the position), kind, plain-English, and says *why*:
   ≥ 90 % of best-move explanations concrete (`tests/concrete.test.ts`), reading level ≤ grade 6.
+- Mistake labels agree with a deeper independent check ≥ 90 % (`tests/labels.test.ts`).
 
 ## Conventions
 - Coach voice: encouraging, never mocking; explain the idea first, then moves.

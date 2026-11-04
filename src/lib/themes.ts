@@ -2,7 +2,7 @@
 // kind of mistake keeps coming back.
 
 import type { Phase, ThemeId } from './types';
-import { forkAfter, materialSwing, pinAfter, play, wasThreatBefore, type Side } from './tactics';
+import { forkAfter, pinAfter, play, settledSwing, wasThreatBefore, type Side } from './tactics';
 import { Chess } from 'chess.js';
 
 export interface ThemeInfo {
@@ -129,7 +129,7 @@ export function classify(i: ClassifyInput): ThemeId {
     play(c, i.playedUci);
     return c.fen();
   })();
-  const lost = i.refutation.length ? materialSwing(afterFen, i.refutation, opp, 8) : 0;
+  const lost = i.refutation.length ? settledSwing(afterFen, i.refutation, opp, 10) : 0;
   const reply = i.refutation[0];
   if (reply && lost >= 2) {
     if (forkAfter(afterFen, reply)) return 'allowed-fork';
@@ -137,7 +137,7 @@ export function classify(i: ClassifyInput): ThemeId {
   }
 
   // What could we have won?
-  const gain = best ? materialSwing(i.fenBefore, i.bestPv, me, 8) : 0;
+  const gain = best ? settledSwing(i.fenBefore, i.bestPv, me, 10) : 0;
   if (best && gain >= 2) {
     if (forkAfter(i.fenBefore, best)) return 'missed-fork';
     if (pinAfter(i.fenBefore, best)) return 'missed-pin';
