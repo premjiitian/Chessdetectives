@@ -11,15 +11,18 @@
     "build": "npm run engine && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "node tests/e2e.mjs"
+    "e2e": "node tests/e2e.mjs",
+    "loop": "node scripts/loop.mjs"
   },
   "dependencies": {
     "@diffusionstudio/vits-web": "^1.0.3",
     "@lichess-org/chessground": "10.5.0",
     "chess.js": "1.4.0",
+    "firebase": "^12.19.0",
     "stockfish": "19.0.1"
   },
   "devDependencies": {
+    "axe-core": "^4.14.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.7",
     "vitest": "^3.2.7"

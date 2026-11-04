@@ -17,7 +17,14 @@ export interface Profile {
 
 async function getJson(url: string): Promise<any> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    let res: Response;
+    try {
+      res = await fetch(url, { headers: { Accept: 'application/json' } });
+    } catch {
+      throw new Error(typeof navigator !== 'undefined' && !navigator.onLine
+        ? "You're offline — showing the games already saved on this device."
+        : "Couldn't reach chess.com. Check your internet connection and try again.");
+    }
     if (res.ok) return res.json();
     if (res.status === 404) throw new Error('not-found');
     if (res.status === 429 || res.status >= 500) {

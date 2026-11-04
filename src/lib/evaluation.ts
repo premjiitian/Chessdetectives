@@ -35,3 +35,9 @@ export function formatEval(line: Pick<EngineLine, 'cp' | 'mate'>, sign = 1): str
 export function flip(line: EngineLine): EngineLine {
   return { ...line, cp: line.cp === null ? null : -line.cp, mate: line.mate === null ? null : -line.mate };
 }
+
+/** Fits the narrow eval bar: "+3.2", "-10", "M3". */
+export function shortEval(line: Pick<EngineLine, 'cp' | 'mate'>): string {
+  const t = formatEval(line);
+  return t.length > 4 ? t.replace(/\.\d$/, '') : t;
+}

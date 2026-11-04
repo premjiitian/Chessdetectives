@@ -24,7 +24,29 @@ export interface Progress {
   themes: Partial<Record<ThemeId, { attempts: number; clean: number }>>;
   cards: Record<string, CardState>;
   badges: string[];
+  chapters?: number[]; // episodes watched
+  log?: XpEntry[]; // every puzzle you finished, newest last
 }
+
+export interface XpEntry {
+  t: number; // when (ms)
+  id: string; // case id
+  level: number; // difficulty 1..5
+  result: 'clean' | 'hinted' | 'failed';
+  xp: number; // XP for the puzzle itself
+  bonus: number; // streak bonus that day
+  replay?: boolean;
+}
+
+/** XP per puzzle by difficulty: [solved cleanly, with hints/one miss, failed]. */
+export const XP_TABLE: Record<number, [number, number, number]> = {
+  1: [10, 5, 2],
+  2: [20, 10, 3],
+  3: [30, 15, 5],
+  4: [45, 22, 7],
+  5: [60, 30, 9],
+};
+export const xpFor = (level: number, result: 'clean' | 'hinted' | 'failed') => XP_TABLE[level]?.[result === 'clean' ? 0 : result === 'hinted' ? 1 : 2] ?? 0;
 
 const INTERVAL_DAYS = [0, 1, 3, 7, 14, 30, 60];
 
@@ -47,6 +69,8 @@ export const BADGES: Record<string, { title: string; icon: string; desc: string 
   'fork-master': { title: 'Fork Master', icon: '🍴', desc: 'Solved 3 fork puzzles cleanly.' },
   'blunder-buster': { title: 'Blunder Buster', icon: '🛡️', desc: 'Solved 10 of your blunders.' },
   'fifty': { title: 'Case Hardened', icon: '🗂️', desc: 'Solved 50 puzzles.' },
+  'student': { title: 'Star Student', icon: '📺', desc: 'Watched 5 chapters of the course.' },
+  'graduate': { title: 'Graduate Detective', icon: '🎓', desc: 'Watched all 20 chapters.' },
 };
 
 export function rankOf(xp: number) {
@@ -75,14 +99,19 @@ export function cardOf(p: Progress, id: string): CardState {
 }
 
 export interface ResultSummary {
-  xp: number;
+  xp: number; // total earned (puzzle + bonus)
+  base: number; // for the puzzle itself
+  bonus: number; // daily streak bonus
+  replay: boolean; // solved again before it was due: reduced XP
   newBadges: string[];
   rankUp: boolean;
 }
 
 /** Records a finished puzzle and returns the XP earned. */
-export function recordResult(p: Progress, m: MistakeRecord, result: 'clean' | 'hinted' | 'failed', now = Date.now()): ResultSummary {
+export function recordResult(p: Progress, m: MistakeRecord, result: 'clean' | 'hinted' | 'failed', now = Date.now(), level = 3): ResultSummary {
   const card = cardOf(p, m.id);
+  // Re-solving a case you already know (before it is due) still counts, but for less XP.
+  const replay = card.solved > 0 && card.due > now;
   const rankBefore = rankOf(p.xp).index;
   card.attempts++;
   card.lastSeen = now;
@@ -101,8 +130,8 @@ export function recordResult(p: Progress, m: MistakeRecord, result: 'clean' | 'h
   t.attempts++;
   if (result === 'clean') t.clean++;
 
-  let xp = result === 'clean' ? 30 : result === 'hinted' ? 15 : 5;
-  if (m.severity === 'blunder' && result !== 'failed') xp += 10;
+  const base = replay ? Math.max(1, Math.round(xpFor(level, result) / 4)) : xpFor(level, result);
+  let bonus = 0;
 
   const d = today(new Date(now));
   if (p.lastDay !== d) {
@@ -110,16 +139,19 @@ export function recordResult(p: Progress, m: MistakeRecord, result: 'clean' | 'h
     p.streak = p.lastDay === y ? p.streak + 1 : 1;
     p.lastDay = d;
     p.bestStreak = Math.max(p.bestStreak, p.streak);
-    xp += Math.min(50, p.streak * 5); // daily streak bonus
+    bonus = Math.min(50, p.streak * 5); // daily streak bonus
   }
   if (result !== 'failed') p.daily[d] = (p.daily[d] ?? 0) + 1;
+  const xp = base + bonus;
   p.xp += xp;
+  (p.log ??= []).push({ t: now, id: m.id, level, result, xp: base, bonus, ...(replay ? { replay: true } : {}) });
+  if (p.log.length > 500) p.log.splice(0, p.log.length - 500);
 
   const newBadges = checkBadges(p);
-  return { xp, newBadges, rankUp: rankOf(p.xp).index > rankBefore };
+  return { xp, base, bonus, replay, newBadges, rankUp: rankOf(p.xp).index > rankBefore };
 }
 
-function checkBadges(p: Progress): string[] {
+export function checkBadges(p: Progress): string[] {
   const cards = Object.values(p.cards);
   const solved = cards.reduce((a, c) => a + (c.solved ? 1 : 0), 0);
   const clean = Object.values(p.themes).reduce((a, t) => a + (t?.clean ?? 0), 0);
@@ -137,6 +169,8 @@ function checkBadges(p: Progress): string[] {
   give('mate-hunter', (p.themes['missed-mate']?.clean ?? 0) >= 3);
   give('fork-master', (p.themes['missed-fork']?.clean ?? 0) + (p.themes['allowed-fork']?.clean ?? 0) >= 3);
   give('fifty', solved >= 50);
+  give('student', (p.chapters?.length ?? 0) >= 5);
+  give('graduate', (p.chapters?.length ?? 0) >= 20);
   return earned;
 }
 
@@ -148,18 +182,58 @@ export function countBlunderSolves(p: Progress, mistakes: MistakeRecord[]): numb
  * Today's session: due reviews first, then fresh cases from your most common
  * weakness, then a mix. Blunders before mistakes, recent before old.
  */
-export function buildSession(p: Progress, mistakes: MistakeRecord[], size = 6, now = Date.now(), focus?: ThemeId): MistakeRecord[] {
+export function buildSession(
+  p: Progress,
+  mistakes: MistakeRecord[],
+  size = 6,
+  now = Date.now(),
+  focus?: ThemeId,
+  rand: () => number = Math.random,
+): MistakeRecord[] {
   const pool = focus ? mistakes.filter((m) => m.theme === focus) : mistakes;
-  const due = pool.filter((m) => p.cards[m.id] && p.cards[m.id].due <= now).sort((a, b) => p.cards[a.id].due - p.cards[b.id].due);
+  const due = shuffle(pool.filter((m) => p.cards[m.id] && p.cards[m.id].due <= now), rand);
   const fresh = pool.filter((m) => !p.cards[m.id]);
   const counts = new Map<ThemeId, number>();
   for (const m of mistakes) counts.set(m.theme, (counts.get(m.theme) ?? 0) + 1);
-  const score = (m: MistakeRecord) => (counts.get(m.theme) ?? 0) * 2 + (m.severity === 'blunder' ? 5 : 0) + m.endTime / 1e9;
-  fresh.sort((a, b) => score(b) - score(a));
-  const out: MistakeRecord[] = [];
-  for (const m of [...due.slice(0, Math.ceil(size / 2)), ...fresh, ...due]) {
-    if (out.length >= size) break;
-    if (!out.includes(m)) out.push(m);
+  // Your most common mistakes and blunders are more likely to be picked — but
+  // never always the same ones, so every session feels fresh.
+  const weight = (m: MistakeRecord) => 1 + (counts.get(m.theme) ?? 0) * 2 + (m.severity === 'blunder' ? 5 : 0);
+  const picked: MistakeRecord[] = due.slice(0, Math.ceil(size / 2));
+  for (const m of weightedSample(fresh, size - picked.length, weight, rand)) picked.push(m);
+  for (const m of due) if (picked.length < size && !picked.includes(m)) picked.push(m);
+  return spreadGames(shuffle(picked, rand));
+}
+
+export function shuffle<T>(list: T[], rand: () => number = Math.random): T[] {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Picks n items without repeats; heavier items are more likely. */
+function weightedSample<T>(items: T[], n: number, weight: (t: T) => number, rand: () => number): T[] {
+  const left = [...items];
+  const out: T[] = [];
+  while (out.length < n && left.length) {
+    const total = left.reduce((a, t) => a + weight(t), 0);
+    let r = rand() * total;
+    let i = 0;
+    while (i < left.length - 1 && (r -= weight(left[i])) > 0) i++;
+    out.push(left.splice(i, 1)[0]);
+  }
+  return out;
+}
+
+/** Avoids two cases from the same game back to back when possible. */
+function spreadGames(list: MistakeRecord[]): MistakeRecord[] {
+  const out = [...list];
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].gameId !== out[i - 1].gameId) continue;
+    const j = out.findIndex((m, k) => k > i && m.gameId !== out[i - 1].gameId);
+    if (j > 0) [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
 }

@@ -3,13 +3,14 @@
 
 import { app } from '../lib/app';
 import { parsePgn } from '../lib/analyzer';
-import { explainAlternative, explainBest, explainFailure, hints, numberedLine, QUOTES, type HintStep } from '../lib/coach';
+import { evalChange, evalWords, explainAlternative, explainBest, explainFailure, hints, numberedLine, QUOTES, type HintStep } from '../lib/coach';
 import { getEngine } from '../lib/engine';
-import { flip, formatEval, winPercent } from '../lib/evaluation';
+import { flip, shortEval, winPercent } from '../lib/evaluation';
 import { THEMES } from '../lib/themes';
 import { sanOf } from '../lib/tactics';
 import { difficultyOf } from '../lib/difficulty';
-import { buildSession, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
+import { CHAPTERS, chapterByEp, practiceFor, thumb } from '../lib/chapters';
+import { buildSession, shuffle, xpFor, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
 import type { EngineLine, MistakeRecord, ThemeId } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, confetti, esc, longDate, md, timeAgo, timeControlLabel, toast } from '../ui/dom';
@@ -27,7 +28,14 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const m = app.findMistake(id);
     queue = m ? [m] : [];
   } else {
-    queue = buildSession(p, all, 6, Date.now(), theme ?? undefined);
+    const chapter = params.get('chapter') ? chapterByEp(Number(params.get('chapter'))) : undefined;
+    queue = chapter
+      ? (() => {
+          const pool = practiceFor(chapter, all);
+          const due = pool.filter((m) => !p.cards[m.id] || p.cards[m.id].due <= Date.now());
+          return shuffle(due.length ? due : pool).slice(0, 6);
+        })()
+      : buildSession(p, all, 6, Date.now(), theme ?? undefined);
   }
 
   if (!queue.length) {
@@ -106,6 +114,8 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
   let top: Promise<EngineLine[]> = Promise.resolve([]);
   let lastMove: [string, string] | undefined;
   let hintsLeft = 0;
+  let attempt = 0; // bumps on every move you make; stale work is dropped
+  let reviewing = false; // showing what went wrong; any tap returns to the puzzle
   let revealAll = () => {};
   let alwaysShow = false;
   try {
@@ -144,7 +154,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const userLine = sideToMoveIsUser ? line : flip(line);
     const w = winPercent(userLine);
     (evalbar.querySelector('i') as HTMLElement).style.height = `${w}%`;
-    evalbar.querySelector('span')!.textContent = formatEval(userLine);
+    evalbar.querySelector('span')!.textContent = shortEval(userLine);
     evalbar.classList.toggle('black', m.userColor === 'black');
   };
 
@@ -178,7 +188,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const card = p.cards[m.id];
     head.innerHTML = `
       <div class="case-top">
-        <span class="case-no">Case ${i + 1}/${queue.length}</span>
+        <span class="case-no">${params.get('chapter') ? `📺 Chapter ${params.get('chapter')} practice · ` : ''}Case ${i + 1}/${queue.length}</span>
         <span class="sev ${m.severity}">${m.severity}</span>
         ${card?.attempts ? `<span class="review">↻ review</span>` : '<span class="new">new</span>'}
       </div>
@@ -193,12 +203,12 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
         </div>
       </div>
       <div class="reveal-row">
-        <button class="chip-reveal" data-reveal="difficulty" aria-label="Reveal difficulty">
+        <button class="chip-reveal" data-reveal="difficulty">
           <span class="chip-k">Difficulty</span>
           <span class="chip-hidden">👁 Tap to reveal</span>
-          <span class="chip-shown"><span class="stars" aria-hidden="true">${'★'.repeat(diff.level)}${'☆'.repeat(5 - diff.level)}</span> ${esc(diff.label)} · ≈${diff.rating}</span>
+          <span class="chip-shown"><span class="stars" aria-hidden="true">${'★'.repeat(diff.level)}${'☆'.repeat(5 - diff.level)}</span> ${esc(diff.label)} · ≈${diff.rating} · up to ${xpFor(diff.level, 'clean')} XP</span>
         </button>
-        <button class="chip-reveal" data-reveal="topic" aria-label="Reveal topic">
+        <button class="chip-reveal" data-reveal="topic">
           <span class="chip-k">Topic</span>
           <span class="chip-hidden">👁 Tap to reveal</span>
           <span class="chip-shown">${info.icon} ${esc(info.title)}</span>
@@ -228,10 +238,24 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     board?.destroy();
     stepFen = m.fenBefore;
     board = new Board($(view, '#board'), { fen: m.fenBefore, orientation: m.userColor, onMove: onUserMove });
+    const host = $(view, '#board');
+    if (!host.dataset.tapReset) {
+      host.dataset.tapReset = '1';
+      host.addEventListener('pointerdown', () => reviewing && resetStep(), { capture: true });
+    }
     board.sync(lastMove);
     hintSteps = hints(m.fenBefore, m.bestUci, info.hint);
     // Small hook used by the automated browser test (tests/e2e.mjs).
     (window as any).__cd = () => ({ played: m.playedUci, best: m.bestUci, color: m.userColor });
+    (window as any).__cdStep = async () => {
+      const lines = await top;
+      return {
+        id: m.id, fen: stepFen, solved, busy, interactive: !!board && !solved && !busy && !reviewing,
+        best: lines[0]?.uci[0] ?? null,
+        lines: lines.map((l) => ({ uci: l.uci[0], win: Math.round(winPercent(l)) })),
+        legal: board ? board.chess.moves({ verbose: true }).map((x) => x.from + x.to + (x.promotion ?? '')) : [],
+      };
+    };
 
     const when = timeAgo(m.endTime);
     const flash = game
@@ -246,6 +270,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     top.then((lines) => {
       if (destroyed || thisCase !== m || !lines[0]) return;
       setEval(lines[0], true);
+      if (!solved && !busy) say(`<p class="eval-line">${esc(`📊 Right now Stockfish rates this position ${evalWords(lines[0])}. Find the move that keeps it that way.`)}</p>`);
       // The deeper search is the referee: hints follow its best move.
       hintSteps = hints(m.fenBefore, lines[0].uci[0], info.hint);
       // Quality check: if your game move turns out to be fine, skip this case.
@@ -254,6 +279,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
         solved = true;
         board?.setInteractive(false);
         say('<p>🔎 On a deeper look, your game move was actually fine — the quick scan was too strict. Case dismissed!</p>', 'good');
+        app.dismissMistake(m.id);
         btnHint.hidden = btnSol.hidden = true;
         btnNext.hidden = false;
       }
@@ -262,12 +288,17 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
 
   async function onUserMove(uci: string) {
     if (!board || busy || solved) return;
+    const my = ++attempt;
+    reviewing = false;
+    // A new move replaces the previous explanation: stop talking, fade old messages.
+    stopVoice();
+    feed.querySelectorAll('.msg:not(.old)').forEach((el) => el.classList.add('old'));
     busy = true;
     board.setInteractive(false);
     board.shapes([]);
     const fen = stepFen;
     const lines = await top;
-    if (destroyed) return;
+    if (destroyed || my !== attempt) return;
     const best = lines[0];
     if (!best) {
       busy = false;
@@ -289,53 +320,65 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     let reply: EngineLine | undefined;
     if (!line) {
       const after = await analyse(board.chess.fen(), 14, 1);
+      if (destroyed || my !== attempt) return;
       reply = after[0];
       line = reply ? { ...flip(reply), uci: [uci, ...reply.uci] } : undefined;
     }
     const bestWin = winPercent(best);
     const myWin = line ? winPercent(line) : 0;
     const gap = bestWin - myWin;
+    // The bar follows the move you just tried (your point of view).
+    setEval(line ?? best, true);
+    const evalLine = line ? `<p class="eval-line">${esc(evalChange(best, line))}</p>` : '';
 
     if (gap <= ACCEPT || uci === best.uci[0]) {
       await correct(fen, line ?? best);
     } else if (uci === m.playedUci && steps === 0) {
       fails++;
+      reviewing = true; // from now on, a tap on the board skips ahead
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
-      say(`<p><b>That's the move you played in the game!</b> Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
-      await punish(r);
+      say(`<p><b>That's the move you played in the game!</b></p>${evalLine}<p>Why? Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
+      await punish(r, my);
     } else if (gap <= ALTERNATIVE || (myWin >= 55 && gap <= 15)) {
-      say(paras(explainAlternative(fen, uci, myWin, bestWin)), 'alt');
-      await sleep(400);
-      tryAgainButton('Find the stronger move');
+      reviewing = true;
+      say(`${paras(explainAlternative(fen, uci, myWin, bestWin))}${line ? `<p class="eval-line">📊 Your move: ${esc(evalWords(line))}. The best move: ${esc(evalWords(best))}.</p>` : ''}`, 'alt');
+      say('<p>↺ Good thinking — now find the even stronger move. The board resets in a moment (or tap it).</p>', 'coach');
+      await review(my);
     } else {
       fails++;
+      reviewing = true;
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
-      say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
-      await punish(r);
+      say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${evalLine}<p>Why?</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
+      await punish(r, my);
     }
   }
 
-  async function punish(r: EngineLine | undefined) {
+  async function punish(r: EngineLine | undefined, my: number) {
     if (!board || destroyed) return;
     const replyMove = r?.uci[0];
     if (replyMove) {
       await sleep(650);
+      if (destroyed || my !== attempt || !reviewing) return; // skipped by a tap
       board.play(replyMove);
       board.shapes([board.arrow(replyMove.slice(0, 2), replyMove.slice(2, 4), 'red')]);
     }
-    tryAgainButton(fails >= 2 && hintsUsed < hintSteps.length ? 'Try again (a hint might help 💡)' : 'Try again');
+    if (!reviewing) return;
+    say(`<p>↺ Your turn again${fails >= 2 && hintsUsed < hintSteps.length ? ' — a 💡 hint might help' : ''}. The board resets in a moment (or tap it).</p>`, 'coach');
+    await review(my);
   }
 
-  function tryAgainButton(label: string) {
-    const msg = say(`<button class="btn small">${esc(label)} ↺</button>`, 'coach');
-    msg.querySelector('button')!.addEventListener('click', () => {
-      msg.remove();
-      resetStep();
-    });
+  /** Shows the punishment briefly, then puts the puzzle back so you can try again straight away. */
+  async function review(my: number) {
+    if (!reviewing) return;
+    busy = false;
+    await sleep(1600);
+    if (!destroyed && my === attempt && reviewing) resetStep();
   }
 
   function resetStep() {
     if (!board) return;
+    reviewing = false;
+    top.then((l) => !destroyed && setEval(l[0], true));
     board.setPosition(stepFen, steps === 0 ? lastMove : undefined);
     board.shapes([]);
     board.setInteractive(true);
@@ -346,7 +389,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     if (!board) return;
     steps++;
     const quality = line.uci[0] === (await top)[0]?.uci[0] ? 'the best move' : 'just as strong as the engine move';
-    say(`<p><b>${['Excellent!', 'Brilliant detective work!', 'Spot on!', 'Yes — that\'s it!'][steps % 4]}</b> That's ${quality}.</p>${paras(explainBest(fen, line))}`, 'good');
+    say(`<p><b>${['Excellent!', 'Brilliant detective work!', 'Spot on!', 'Yes — that\'s it!'][steps % 4]}</b> That's ${quality}.</p>${paras(explainBest(fen, line))}<p class="eval-line">${esc(`📊 Evaluation: ${evalWords(line)}.`)}</p>`, 'good');
     board.shapes([board.arrow(line.uci[0].slice(0, 2), line.uci[0].slice(2, 4), 'green')]);
 
     const after = board.chess;
@@ -420,7 +463,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     board.setInteractive(false);
     const result = revealed || fails >= 2 ? 'failed' : fails === 1 || hintsUsed > 0 ? 'hinted' : 'clean';
     const rankBefore = rankOf(p.xp);
-    const sum = recordResult(p, m, result);
+    const sum = recordResult(p, m, result, Date.now(), difficultyOf(m).level);
     if (countBlunderSolves(p, all) >= 10 && !p.badges.includes('blunder-buster')) {
       p.badges.push('blunder-buster');
       sum.newBadges.push('blunder-buster');
@@ -439,12 +482,21 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const solvedLine = numberedLine(m.fenBefore, deep?.uci.length ? deep.uci : m.pv, 8);
     say(
       `<div class="stamp ${result}">${result === 'clean' ? 'CASE CLOSED' : result === 'hinted' ? 'CASE SOLVED' : 'CASE REOPENS SOON'}</div>
-       <p class="xp-line">+${sum.xp} XP ${result === 'failed' ? '· this case will come back in a few minutes' : result === 'hinted' ? '· it will return for a review' : '· see you in a few days for a check-up'}</p>
+       <p class="xp-line">+${sum.base} XP <span class="sub">for a ${'★'.repeat(difficultyOf(m).level)} ${esc(difficultyOf(m).label)} puzzle, ${result === 'clean' ? 'solved cleanly' : result === 'hinted' ? 'solved with help' : 'shown the answer'}${sum.replay ? ' (a replay: ¼ XP)' : ''}</span>${sum.bonus ? ` <span class="bonus">+${sum.bonus} 🔥 streak bonus</span>` : ''}</p>
+       <p class="sub">${result === 'failed' ? 'This case comes back in a few minutes.' : result === 'hinted' ? 'It will return for a review.' : 'See you in a few days for a check-up.'}</p>
        <p class="arrows-key"><span class="k red"></span> your game move ${esc(m.played)} &nbsp; <span class="k green"></span> best move ${esc(bestSan)}</p>
        <p>Best line: ${esc(solvedLine)}</p>`,
       'lesson',
     );
-    say(`<h4>${info.icon} Key lesson: ${esc(info.title)}</h4><p>${esc(info.lesson)}</p>`, 'lesson');
+    const lesson = say(`<h4>${info.icon} Key lesson: ${esc(info.title)}</h4><p>${esc(info.lesson)}</p>`, 'lesson');
+    const ch = CHAPTERS.find((c) => c.themes[0] === m.theme) ?? CHAPTERS.find((c) => c.themes.length < 6 && c.themes.includes(m.theme));
+    if (ch) {
+      const a = document.createElement('a');
+      a.className = 'learn-more';
+      a.href = `#/chapters/${ch.ep}`;
+      a.innerHTML = `<img src="${thumb(ch.videoId)}" alt="" loading="lazy" /><span>📺 <b>Learn more:</b> Ep ${ch.ep} · ${esc(ch.title)}</span>`;
+      lesson.append(a);
+    }
     say(
       `<p>Want to prove it? Play this position out against Stockfish.</p><a class="btn small" href="#/play?fen=${encodeURIComponent(m.fenBefore)}&color=${m.userColor}">♟️ Play it out vs Stockfish</a>`,
       'coach',
@@ -498,6 +550,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function speechText(div: HTMLElement): string {
   const c = div.cloneNode(true) as HTMLElement;
   c.querySelectorAll('button, a.btn').forEach((b) => b.remove());
-  c.querySelectorAll('p, h4, div').forEach((e) => e.append(' '));
+  c.querySelectorAll('h4, .stamp').forEach((e) => e.append('. '));
+  c.querySelectorAll('p, div').forEach((e) => e.append(' '));
   return (c.textContent ?? '').replace(/\s+/g, ' ').trim();
 }

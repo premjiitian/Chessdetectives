@@ -110,3 +110,28 @@ export function headline(s: PeriodStats): string {
   if (top) return `Your #1 recurring clue: ${THEMES[top.id].title.toLowerCase()} (${top.count}× in ${s.analyzed} games). Let's close those cases.`;
   return 'Clean games! Not a single real mistake found. Time to play stronger opponents?';
 }
+
+export interface WeekPoint {
+  start: number; // unix seconds, start of week
+  games: number;
+  accuracy: number | null;
+  blundersPerGame: number | null;
+}
+
+/** Week-by-week accuracy and blunders, oldest first (only analyzed games count). */
+export function weeklyTrend(games: GameRecord[], analyses: Map<string, GameAnalysis>, weeks: number, now = Date.now() / 1000): WeekPoint[] {
+  const W = 7 * 86400;
+  const out: WeekPoint[] = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const end = now - i * W;
+    const start = end - W;
+    const done = games.filter((g) => g.endTime > start && g.endTime <= end).map((g) => analyses.get(g.id)).filter((a): a is GameAnalysis => !!a);
+    out.push({
+      start,
+      games: done.length,
+      accuracy: done.length ? done.reduce((a, b) => a + b.accuracy, 0) / done.length : null,
+      blundersPerGame: done.length ? done.reduce((a, b) => a + b.mistakes.filter((m) => m.severity === 'blunder').length, 0) / done.length : null,
+    });
+  }
+  return out;
+}

@@ -1,3 +1,4 @@
+import { pinKey, pinManifest, pinUrl } from './pin';
 // The voice coach: reads coaching out loud with the browser's built-in
 // speech engine (free, no account). It picks the most natural-sounding
 // English voice your device has and says chess moves the way people do.
@@ -27,11 +28,19 @@ export function toSpeech(text: string): string {
   return (
     text
       // 18...Qb6 / 19.Qb3 -> drop move numbers
-      .replace(/\b\d+\.(\.\.)?\s?/g, '')
+      .replace(/\b\d+\.(\.\.)?\s?(?=[KQRBNO]|[a-h][1-8x])/g, '')
       // Long engine lines and the points legend read badly aloud; they stay on screen.
       .replace(/(Stockfish's main line|A likely continuation|Best line):[^.]*(\.|$)/g, '')
-      .replace(/\(pawn = 1[^)]*\)/g, '')
+      .replace(/\((?:a )?pawn (?:=|is) 1[^)]*\)/g, '')
       .replace(/\b(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?)(?=[\s.,;:!?)—–-]|$)/g, (s) => sayMove(s))
+      // Evaluations: "+1.4" -> "plus 1 point 4", "-M2" -> "mate in 2 against you"
+      .replace(/-M(\d+)/g, 'mate in $1 against you')
+      .replace(/\bM(\d+)\b/g, 'mate in $1')
+      .replace(/\+(\d+\.\d)/g, 'plus $1')
+      .replace(/(^|[\s(])[-−](\d+\.\d)/g, '$1minus $2')
+      .replace(/(\d)\.(\d)/g, '$1 point $2')
+      .replace(/📊/g, '')
+      .replace(/→/g, ', now')
       .replace(/[★☆]/g, '')
       .replace(/≈/g, 'about ')
       .replace(/%/g, ' percent')
@@ -45,7 +54,7 @@ export function toSpeech(text: string): string {
 
 export interface VoiceSettings {
   enabled: boolean;
-  engine: 'natural' | 'device';
+  engine: 'pin' | 'natural' | 'device';
   naturalVoice: string;
   voiceURI: string;
   rate: number;
@@ -60,7 +69,7 @@ export const NATURAL_VOICES = [
 ] as const;
 
 const KEY = 'voice-settings';
-let settings: VoiceSettings = { enabled: false, engine: 'natural', naturalVoice: NATURAL_VOICES[0].id, voiceURI: '', rate: 1 };
+let settings: VoiceSettings = { enabled: false, engine: 'pin', naturalVoice: NATURAL_VOICES[1].id, voiceURI: '', rate: 1 };
 try {
   settings = { ...settings, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
 } catch {}
@@ -142,6 +151,30 @@ async function prepareNatural(): Promise<boolean> {
   }
 }
 
+let sharedPlayer: HTMLAudioElement | null = null;
+function player(): HTMLAudioElement {
+  sharedPlayer ??= new Audio();
+  return sharedPlayer;
+}
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+/** Call from a tap: unlocks audio and speech on iPad/iPhone Safari. */
+export function unlockAudio() {
+  try {
+    const a = player();
+    a.src = SILENCE;
+    a.play().catch(() => {});
+    if (voiceSupported()) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+  } catch {}
+}
+if (typeof window !== 'undefined') {
+  // Any first tap anywhere also unlocks audio, so the coach can speak later.
+  const once = () => {
+    if (settings.enabled) unlockAudio();
+    window.removeEventListener('pointerdown', once);
+  };
+  window.addEventListener('pointerdown', once);
+}
+
 let queue: string[] = [];
 let playing = false;
 let generation = 0; // bumps on stop() so stale audio is dropped
@@ -160,7 +193,7 @@ function synth(text: string): Promise<Blob> {
 }
 
 /** Short sentences come back faster, so speech starts sooner. */
-function sentences(text: string): string[] {
+export function sentences(text: string): string[] {
   return text.match(/[^.!?]+[.!?]*/g)?.map((x) => x.trim()).filter(Boolean) ?? [text];
 }
 
@@ -170,50 +203,66 @@ async function pump() {
   const gen = generation;
   while (queue.length && gen === generation) {
     const text = queue.shift()!;
-    if (queue[0]) synth(queue[0]); // prepare the next sentence while this one plays
+    const clips = settings.engine === 'pin' ? await pinManifest() : {};
+    const clip = clips[pinKey(text)];
+    const useNatural = !clip && settings.engine !== 'device' && naturalReady;
+    if (useNatural && queue[0] && !clips[pinKey(queue[0])]) synth(queue[0]); // prepare the next sentence while this one plays
     try {
-      const blob = await synth(text);
+      if (!clip && !useNatural) {
+        await deviceSpeakAsync(text);
+        continue;
+      }
+      const src = clip ? pinUrl(clip) : URL.createObjectURL(await synth(text));
       if (gen !== generation) break;
       await new Promise<void>((resolve) => {
-        const a = new Audio(URL.createObjectURL(blob));
+        // One reused <audio>: iPad Safari only lets an element play after it
+        // was "unlocked" by a tap, so we keep using the same one.
+        const a = player();
         current = a;
-        a.playbackRate = settings.rate;
         a.onended = a.onerror = () => resolve();
+        a.src = src;
+        a.playbackRate = settings.rate;
         a.play().catch(() => resolve());
       });
     } catch {
-      deviceSpeak(text);
+      await deviceSpeakAsync(text);
     }
   }
   current = null;
   playing = false;
 }
 
-function deviceSpeak(spoken: string) {
-  if (!voiceSupported()) return;
-  const u = new SpeechSynthesisUtterance(spoken);
-  const v = chosenVoice();
-  if (v) u.voice = v;
-  u.lang = v?.lang ?? 'en-US';
-  u.rate = settings.rate;
-  speechSynthesis.speak(u);
+/** Device voice, waiting until the sentence is finished (so voices never overlap). */
+function deviceSpeakAsync(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (!voiceSupported()) return resolve();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = chosenVoice();
+    if (v) u.voice = v;
+    u.lang = v?.lang ?? 'en-US';
+    u.rate = settings.rate;
+    const done = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    // Some browsers never fire 'end' — don't get stuck.
+    const t = setTimeout(done, 1500 + text.length * 90);
+    u.onend = u.onerror = done;
+    speechSynthesis.speak(u);
+  });
 }
+
 
 /** Speak now (queued after anything already being said). */
 export function speak(text: string, force = false) {
   if (!settings.enabled && !force) return;
   const spoken = toSpeech(text);
   if (!spoken) return;
-  if (settings.engine === 'natural' && !naturalFailed) {
-    if (naturalReady) {
-      queue.push(...sentences(spoken));
-      pump();
-      return;
-    }
-    // Still downloading: use the device voice meanwhile.
-    prepareNatural();
-  }
-  deviceSpeak(spoken);
+  // Get the natural voice ready in the background; until then the device voice
+  // reads lines that have no Professor Pin recording.
+  if (settings.engine !== 'device' && !naturalReady && !naturalFailed) prepareNatural();
+  queue.push(...sentences(spoken));
+  pump();
 }
 
 export function stop() {
@@ -238,7 +287,7 @@ export function voiceControl(): HTMLElement {
   const render = () => {
     const list = voices();
     const st = naturalStatus();
-    const natural = settings.engine === 'natural';
+    const natural = settings.engine !== 'device';
     const status = !settings.enabled
       ? ''
       : natural && st.downloading !== null
@@ -256,10 +305,11 @@ export function voiceControl(): HTMLElement {
       <details class="voice-more">
         <summary title="Voice settings">⚙︎</summary>
         <label>Type <select data-v="engine">
-          <option value="natural" ${natural ? 'selected' : ''}>Natural (free, downloads once)</option>
+          <option value="pin" ${settings.engine === 'pin' ? 'selected' : ''}>🕵️ Professor Pin</option>
+          <option value="natural" ${settings.engine === 'natural' ? 'selected' : ''}>Natural voice (free, downloads once)</option>
           <option value="device" ${!natural ? 'selected' : ''}>Device voice (instant)</option>
         </select></label>
-        <label ${natural ? '' : 'hidden'}>Voice <select data-v="natural">${NATURAL_VOICES.map(
+        <label ${natural ? '' : 'hidden'}>${settings.engine === 'pin' ? 'Other lines' : 'Voice'} <select data-v="natural">${NATURAL_VOICES.map(
           (v) => `<option value="${v.id}" ${v.id === settings.naturalVoice ? 'selected' : ''}>${v.label}</option>`,
         ).join('')}</select></label>
         <label ${natural ? 'hidden' : ''}>Voice <select data-v="voice">${list
@@ -271,11 +321,12 @@ export function voiceControl(): HTMLElement {
         <button class="btn small ghost" data-v="test">▶ Test voice</button>
       </details>`;
     wrap.querySelector('[data-v=toggle]')!.addEventListener('click', () => {
+      unlockAudio();
       updateSettings({ enabled: !settings.enabled });
       render();
       if (settings.enabled) {
-        if (settings.engine === 'natural') prepareNatural().then(() => speak("Hi! I'm your voice coach. I'll talk you through every case."));
-        else speak("Hi! I'm your voice coach. I'll talk you through every case.");
+        if (settings.engine !== 'device') prepareNatural().then(() => speak("Hello, detective! I'm Professor Pin. I'll talk you through every case."));
+        else speak("Hello, detective! I'm Professor Pin. I'll talk you through every case.");
       }
     });
     wrap.querySelector<HTMLSelectElement>('[data-v=engine]')!.addEventListener('change', (e) => {
@@ -283,7 +334,7 @@ export function voiceControl(): HTMLElement {
       updateSettings({ engine: (e.target as HTMLSelectElement).value as VoiceSettings['engine'] });
       render();
       wrap.querySelector('details')?.setAttribute('open', '');
-      if (settings.enabled && settings.engine === 'natural') prepareNatural();
+      if (settings.enabled && settings.engine !== 'device') prepareNatural();
     });
     wrap.querySelector<HTMLSelectElement>('[data-v=natural]')!.addEventListener('change', (e) => {
       stop();
@@ -295,6 +346,7 @@ export function voiceControl(): HTMLElement {
     wrap.querySelector<HTMLSelectElement>('[data-v=voice]')!.addEventListener('change', (e) => updateSettings({ voiceURI: (e.target as HTMLSelectElement).value }));
     wrap.querySelector<HTMLSelectElement>('[data-v=rate]')!.addEventListener('change', (e) => updateSettings({ rate: Number((e.target as HTMLSelectElement).value) }));
     wrap.querySelector('[data-v=test]')!.addEventListener('click', () => {
+      unlockAudio();
       stop();
       speak('Knight takes e5, check! It is a fork: your knight attacks the king and the rook at the same time.', true);
     });
@@ -309,7 +361,7 @@ export function voiceControl(): HTMLElement {
     if (open) wrap.querySelector('details')?.setAttribute('open', '');
   };
   listeners.add(onStatus);
-  if (settings.enabled && settings.engine === 'natural') prepareNatural();
+  if (settings.enabled && settings.engine !== 'device') prepareNatural();
   return wrap;
 }
 

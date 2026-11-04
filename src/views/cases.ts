@@ -32,11 +32,12 @@ export function renderCases(view: HTMLElement, params: URLSearchParams) {
         <div><h1>Case files 🗂️</h1><p class="headline">${all.length} moments from your games where a better move was waiting. Pick any case to solve it.</p></div>
       </section>
       <div class="filters card">
-        <select data-f="theme"><option value="">All themes</option>${themesPresent
+        <select data-f="theme" aria-label="Filter by theme"><option value="">All themes</option>${themesPresent
           .map((t) => `<option value="${t}" ${t === theme ? 'selected' : ''}>${THEMES[t].icon} ${esc(THEMES[t].title)}</option>`)
           .join('')}</select>
-        <select data-f="severity"><option value="">Mistakes & blunders</option><option value="blunder" ${severity === 'blunder' ? 'selected' : ''}>Blunders only</option><option value="mistake" ${severity === 'mistake' ? 'selected' : ''}>Mistakes only</option></select>
-        <select data-f="status"><option value="">Any status</option>${['new', 'due', 'solved'].map((s) => `<option value="${s}" ${s === status ? 'selected' : ''}>${s[0].toUpperCase() + s.slice(1)}</option>`).join('')}</select>
+        <select data-f="severity" aria-label="Filter by severity"><option value="">Mistakes & blunders</option><option value="blunder" ${severity === 'blunder' ? 'selected' : ''}>Blunders only</option><option value="mistake" ${severity === 'mistake' ? 'selected' : ''}>Mistakes only</option></select>
+        <select data-f="status" aria-label="Filter by status"><option value="">Any status</option>${['new', 'due', 'solved'].map((s) => `<option value="${s}" ${s === status ? 'selected' : ''}>${s[0].toUpperCase() + s.slice(1)}</option>`).join('')}</select>
+        <a class="sub" href="#/dashboard" title="Change on the dashboard">Game types: ${esc(app.timeClasses.length === 4 ? 'all' : app.timeClasses.join(', '))}</a>
         <span class="count">${list.length} case${list.length === 1 ? '' : 's'}</span>
       </div>
       ${list.length ? `<div class="case-grid">${list

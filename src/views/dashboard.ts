@@ -1,6 +1,7 @@
-import { app, PERIODS, type PeriodId } from '../lib/app';
-import { headline, periodStats } from '../lib/stats';
+import { app, LIVE_TIME_CLASSES, PERIODS, TIME_CLASSES, type PeriodId } from '../lib/app';
+import { headline, periodStats, weeklyTrend, type WeekPoint } from '../lib/stats';
 import { THEMES } from '../lib/themes';
+import { recommendChapter, thumb } from '../lib/chapters';
 import { buildSession } from '../lib/training';
 import { esc, toast } from '../ui/dom';
 
@@ -26,21 +27,46 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     const totalPhase = Math.max(1, s.phases.opening + s.phases.middlegame + s.phases.endgame);
     const name = app.profile?.name?.split(' ')[0] || app.profile?.username || app.username;
     const pct = (n: number) => Math.round(n * 100);
+    const liveOnly = app.timeClasses.length === 3 && LIVE_TIME_CLASSES.every((t) => app.timeClasses.includes(t));
 
     view.innerHTML = `
     <section class="dash-head">
       <div>
-        <h1>Welcome back, ${esc(name)} 👋</h1>
-        <p class="headline">${esc(headline(s))}</p>
+        <h1>${(app.progress?.xp ?? 0) > 0 || app.analyses.size > 25 ? 'Welcome back' : 'Welcome'}, ${esc(name)} 👋</h1>
+        <p class="headline">${esc(app.job && s.analyzed < 5 ? `Professor Pin is studying your games (${s.analyzed} of ${s.games} done) — your patterns appear here as clues come in.` : headline(s))}</p>
       </div>
       <div class="tabs" role="tablist">
         ${PERIODS.map((p) => `<button role="tab" data-period="${p.id}" class="${p.id === period ? 'on' : ''}">${p.label}</button>`).join('')}
       </div>
     </section>
 
+    <section class="speeds" aria-label="Game types">
+      <span class="sp-label">Game types:</span>
+      ${TIME_CLASSES.map((t) => {
+        const on = app.timeClasses.includes(t.id);
+        const n = app.games.filter((g) => (g.timeClass === t.id || (t.id === 'daily' && !['bullet', 'blitz', 'rapid'].includes(g.timeClass))) && g.endTime > Date.now() / 1000 - d * 86400).length;
+        return `<button class="sp ${on ? 'on' : ''}" data-tc="${t.id}" aria-pressed="${on}">${t.icon} ${t.label} <small>${n}</small></button>`;
+      }).join('')}
+      <button class="btn small ghost" data-live ${liveOnly ? 'disabled' : ''}>Live games only</button>
+      ${app.timeClasses.length < TIME_CLASSES.length ? '<button class="btn small ghost" data-all>Show all</button>' : ''}
+    </section>
+
     <section class="status card">
       ${statusHtml(games.length, s.analyzed, pending)}
     </section>
+
+    ${
+      (app.progress?.xp ?? 0) < 150
+        ? `<section class="path card" aria-label="How to use Chess Detectives">
+            <span class="k-label">Your detective path</span>
+            <ol>
+              <li class="${(app.progress?.chapters?.length ?? 0) > 0 ? 'done' : ''}"><a href="#/chapters"><span>📺</span><b>Watch a chapter</b><small>Professor Pin explains one idea</small></a></li>
+              <li class="${Object.keys(app.progress?.cards ?? {}).length > 0 ? 'done' : ''}"><a href="#/train"><span>🧩</span><b>Solve your own cases</b><small>Puzzles from your games</small></a></li>
+              <li><a href="#/play"><span>♟️</span><b>Prove it vs Stockfish</b><small>Play the position out</small></a></li>
+            </ol>
+          </section>`
+        : ''
+    }
 
     <section class="grid-2">
       <a class="card cta" href="#/train">
@@ -49,12 +75,18 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
           <h2>Today's case files</h2>
           <p>${session.length ? `${session.length} puzzles from your own games are waiting${due ? ` · ${due} review${due > 1 ? 's' : ''} due` : ''}.` : 'Analyze a few games to unlock your personal puzzles.'}</p>
         </div>
-        <span class="btn primary">${session.length ? 'Start training →' : 'Waiting for clues'}</span>
+        ${session.length ? '<span class="btn primary">Start training →</span>' : `<span class="sub">${app.job ? '⏳ Puzzles appear as games are analyzed' : 'Press “Analyze” above to find your puzzles'}</span>`}
       </a>
-      <div class="card coach-note">
-        <div class="coach-face">🧑‍🏫</div>
+      ${(() => {
+        const rec = recommendChapter(app.mistakes(d), app.progress?.chapters ?? []);
+        return rec
+          ? `<a class="card coach-note rec-mini" href="#/chapters/${rec.ep}"><img src="${thumb(rec.videoId)}" alt="" loading="lazy" /><div><h3>🕵️ Professor Pin's note</h3><p>${s.themes[0] ? esc(THEMES[s.themes[0].id].lesson) : 'The fastest way to improve is to stop repeating the same mistake.'}</p><p class="rec-line">📺 Watch <b>Ep ${rec.ep}: ${esc(rec.title)}</b>, then practise it on your games →</p></div></a>`
+          : '';
+      })()}
+      <div class="card coach-note" hidden>
+        <div class="coach-face">🕵️</div>
         <div>
-          <h3>Coach's note</h3>
+          <h3>Professor Pin's note</h3>
           <p>${s.themes[0] ? esc(THEMES[s.themes[0].id].lesson) : 'Play, then let us investigate. The fastest way to improve is to stop repeating the same mistake — and you can only fix what you can see.'}</p>
         </div>
       </div>
@@ -67,6 +99,8 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       ${kpi('Blunders / game', s.blundersPerGame === null ? '—' : s.blundersPerGame.toFixed(1), 'big swings (≥20%)')}
       ${kpi('Rating', s.ratingNow === null ? '—' : String(s.ratingNow), s.ratingChange === null ? '' : `${s.ratingChange >= 0 ? '▲' : '▼'} ${Math.abs(s.ratingChange)} this period`, s.ratingChange !== null && s.ratingChange < 0 ? 'down' : 'up')}
     </section>
+
+    ${trendCard(weeklyTrend(app.gamesIn(Math.max(d, 84)), app.analyses, Math.min(26, Math.max(6, Math.round(Math.max(d, 84) / 7)))))}
 
     <section class="grid-main">
       <div class="card">
@@ -136,6 +170,16 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
         }
       }),
     );
+    view.querySelectorAll<HTMLButtonElement>('[data-tc]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const id = b.dataset.tc!;
+        const next = app.timeClasses.includes(id) ? app.timeClasses.filter((t) => t !== id) : [...app.timeClasses, id];
+        if (!next.length) return toast('Keep at least one game type switched on.', 'info');
+        app.setTimeClasses(next);
+      }),
+    );
+    view.querySelector('[data-live]')?.addEventListener('click', () => app.setTimeClasses(LIVE_TIME_CLASSES));
+    view.querySelector('[data-all]')?.addEventListener('click', () => app.setTimeClasses([]));
     view.querySelector('[data-analyze]')?.addEventListener('click', (e) => {
       const n = Number((e.currentTarget as HTMLElement).dataset.analyze);
       app.analyze(days(), n);
@@ -146,7 +190,7 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     sig = signature();
   };
 
-  const signature = () => `${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? 1 : 0}|${period}|${app.progress?.xp}`;
+  const signature = () => `${app.timeClasses.join(',')}|${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? 1 : 0}|${period}|${app.progress?.xp}`;
 
   const statusHtml = (games: number, analyzed: number, pending: number) => {
     if (app.fetching) {
@@ -186,6 +230,8 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       if (params.has('first') || app.analyses.size === 0) {
         if (app.games.length) app.analyze(Math.max(30, days()), 20);
         else toast('No standard chess games found in the last 120 days. Try a longer period.', 'warn', 6000);
+        if (app.games.length && !app.gamesIn(Math.max(30, days())).length)
+          toast('No games of the selected types in this period — try switching on more game types.', 'info', 6000);
       }
     } catch (e) {
       toast(esc((e as Error).message), 'warn', 6000);
@@ -199,4 +245,46 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
 
 function kpi(label: string, value: string, sub: string, cls = '') {
   return `<div class="card kpi"><span class="k-label">${esc(label)}</span><span class="k-value">${esc(value)}</span><span class="k-sub ${cls}">${esc(sub)}</span></div>`;
+}
+
+/** Two small charts: accuracy (higher is better) and blunders per game (lower is better). */
+function trendCard(points: WeekPoint[]): string {
+  const withData = points.filter((p) => p.games > 0);
+  if (withData.length < 3) return '';
+  const W = 560, H = 120, pad = 22;
+  const x = (i: number) => pad + (i * (W - pad * 2)) / Math.max(1, points.length - 1);
+  const chart = (key: 'accuracy' | 'blundersPerGame', label: string, better: string, fmt: (v: number) => string) => {
+    const vals = points.map((p) => p[key]);
+    const real = vals.filter((v): v is number => v !== null);
+    const lo = key === 'accuracy' ? Math.max(0, Math.min(...real) - 5) : 0;
+    const hi = key === 'accuracy' ? Math.min(100, Math.max(...real) + 5) : Math.max(1, ...real);
+    const y = (v: number) => H - pad - ((v - lo) / Math.max(0.0001, hi - lo)) * (H - pad * 2);
+    const pts = vals.map((v, i) => (v === null ? null : [x(i), y(v)] as const)).filter((p): p is readonly [number, number] => !!p);
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    const first = real.slice(0, Math.ceil(real.length / 2));
+    const last = real.slice(Math.floor(real.length / 2));
+    const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+    const change = avg(last) - avg(first);
+    const good = key === 'accuracy' ? change > 0.5 : change < -0.05;
+    const bad = key === 'accuracy' ? change < -0.5 : change > 0.05;
+    const verdict = good ? `<span class="trend good">✓ improving</span>` : bad ? `<span class="trend bad">⚠ needs attention</span>` : `<span class="trend">● steady</span>`;
+    const lastV = real[real.length - 1];
+    return `<figure class="spark">
+      <figcaption><b>${label}</b> <span class="sub">(${better})</span> ${verdict}</figcaption>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label} by week: latest ${fmt(lastV)}">
+        <line x1="${pad}" x2="${W - pad}" y1="${H - pad}" y2="${H - pad}" class="axis" />
+        <path d="${path}" class="line ${key}" fill="none" />
+        ${pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 4.5 : 3}" class="dot ${key}" />`).join('')}
+        <text x="${(pts[pts.length - 1]?.[0] ?? 0) - 4}" y="${(pts[pts.length - 1]?.[1] ?? 0) - 9}" text-anchor="end" class="val">${fmt(lastV)}</text>
+      </svg>
+    </figure>`;
+  };
+  return `<section class="card trend-card">
+    <h2>Your trend, week by week</h2>
+    <p class="sub">${withData.length} weeks with analyzed games. Fixing your own mistakes should push accuracy up and blunders down.</p>
+    <div class="sparks">
+      ${chart('accuracy', 'Accuracy', 'higher is better', (v) => `${Math.round(v)}%`)}
+      ${chart('blundersPerGame', 'Blunders per game', 'lower is better', (v) => v.toFixed(1))}
+    </div>
+  </section>`;
 }

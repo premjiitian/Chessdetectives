@@ -14,6 +14,10 @@ const OUT = 'tests/screens';
 mkdirSync(OUT, { recursive: true });
 const port = 4199;
 const server = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], { stdio: 'pipe', detached: true });
+// cleanup-guard: always stop the preview server, even on failure or timeout
+const killServer = () => { try { process.kill(-server.pid); } catch {} };
+process.on('exit', killServer);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { killServer(); process.exit(1); });
 const stopServer = () => {
   try {
     process.kill(-server.pid);
@@ -78,6 +82,16 @@ const kpis = await page.$$eval('.kpi .k-value', (els) => els.map((e) => e.textCo
 console.log('  KPIs', kpis.join(' | '));
 console.log('  themes', (await page.$$eval('.themes li strong', (e) => e.map((x) => x.textContent))).join(', '));
 
+step('live games only');
+const gamesAll = await page.$eval('.kpi .k-value', (e) => e.textContent);
+await page.click('[data-live]');
+await page.waitForTimeout(400);
+const gamesLive = await page.$eval('.kpi .k-value', (e) => e.textContent);
+console.log(`  games (all types): ${gamesAll} → live only: ${gamesLive}`, '| chips:', await page.$$eval('.sp', (e) => e.map((x) => (x.classList.contains('on') ? '✓' : '✗') + x.textContent.trim()).join(' ')));
+await page.locator('.speeds').screenshot({ path: `${OUT}/02b-game-types.png` });
+await page.click('[data-all]');
+await page.waitForTimeout(300);
+
 step('period switch');
 await page.click('[data-period="7d"]');
 await page.waitForTimeout(500);
@@ -126,7 +140,7 @@ if (current) {
   await page.waitForSelector('.msg.bad', { timeout: 30000 });
   await page.waitForTimeout(1200);
   await shot('05-train-wrong');
-  await page.click('.msg.coach button:not(.replay)');
+  await page.waitForFunction(() => window.__cdStep && window.__cdStep().then((s) => s.interactive), null, { timeout: 15000 }).catch(() => {});
   step('hint x2');
   await page.click('[data-act=hint]');
   await page.click('[data-act=hint]');

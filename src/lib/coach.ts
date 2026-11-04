@@ -113,7 +113,8 @@ function describeOwnMove(fen: string, uci: string): { san: string; facts: string
     const b2 = new Chess(fen);
     const gain = mob(new Chess(flipTurn(after.fen()))) - mob(b2);
     if (gain > 3) facts.push(`It improves your ${pieceName(mv.piece)} and gives your pieces more room to work.`);
-    else facts.push(`It's a quiet move that improves your position.`);
+    else if (!threatsAgainst(after.fen(), true).length) facts.push(`It's a calm, useful move: your ${pieceName(mv.piece)} finds a better square and none of your pieces can be won.`);
+    else facts.push(`It's a quiet move that keeps your position together.`);
   }
   return { san: mv.san, facts, move: mv };
 }
@@ -150,7 +151,7 @@ export function outcomeOf(fen: string, line: EngineLine, pov: Side): string {
   if (swing >= 1) return 'You win a pawn and keep the pressure.';
   if (w >= 80) return 'Your position becomes winning.';
   if (w >= 60) return 'You keep a clear advantage.';
-  if (w >= 45) return 'The position stays balanced and healthy.';
+  if (w >= 45) return 'The game stays even.';
   return 'It is the most stubborn defence — damage control matters too.';
 }
 
@@ -184,7 +185,7 @@ export function explainFailure(fen: string, uci: string, reply: EngineLine | und
     out.push(`After ${mv.san}, your opponent has **${r.san}** and a forced checkmate in ${reply.mate}.`);
   } else {
     out.push(`After ${mv.san}, your opponent answers **${r.san}**. ${r.facts.join(' ')}`);
-    if (lost >= 2) out.push(`Overall that line costs you about ${lost} points of material (pawn = 1, knight/bishop = 3, rook = 5, queen = 9).`);
+    if (lost >= 2) out.push(`That costs you about ${lost} points (a pawn is 1, a knight or bishop is 3, a rook is 5, a queen is 9).`);
   }
   if (reply.uci.length > 1) out.push(`A likely continuation: ${numberedLine(after.fen(), reply.uci, 6)}.`);
   return out;
@@ -239,3 +240,29 @@ export const QUOTES = [
   ['When you see a good move, look for a better one.', 'Emanuel Lasker'],
   ['The threat is stronger than the execution.', 'Aron Nimzowitsch'],
 ];
+
+/** "+1.4" style number plus plain words, from YOUR point of view. */
+export function evalWords(line: Pick<EngineLine, 'cp' | 'mate'>): string {
+  if (line.mate !== null && line.mate !== undefined) {
+    if (line.mate > 0) return `M${line.mate} (a forced checkmate for you)`;
+    if (line.mate < 0) return `-M${-line.mate} (a forced checkmate for your opponent)`;
+    return 'checkmate';
+  }
+  const v = (line.cp ?? 0) / 100;
+  const num = (v > 0 ? '+' : '') + v.toFixed(1);
+  const a = Math.abs(v);
+  const side = v > 0 ? 'you' : 'your opponent';
+  const words =
+    a < 0.5 ? 'about equal'
+    : a < 1.5 ? `a small edge for ${side}`
+    : a < 3 ? `clearly better for ${side}`
+    : a < 6 ? `winning for ${side} — like being a piece up`
+    : `completely winning for ${side}`;
+  return `${num} (${words})`;
+}
+
+/** One sentence about how a move changed the evaluation. */
+export function evalChange(before: Pick<EngineLine, 'cp' | 'mate'>, after: Pick<EngineLine, 'cp' | 'mate'>): string {
+  const same = evalWords(before) === evalWords(after);
+  return same ? `📊 Evaluation stays at ${evalWords(after)}.` : `📊 Evaluation: ${evalWords(before)} → ${evalWords(after)}.`;
+}

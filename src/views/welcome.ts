@@ -2,6 +2,7 @@ import { app } from '../lib/app';
 import { QUOTES } from '../lib/coach';
 import { Board } from '../ui/board';
 import { $, esc } from '../ui/dom';
+import { googleButton } from '../ui/account';
 
 export function renderWelcome(root: HTMLElement) {
   const [q, who] = QUOTES[Math.floor(Math.random() * QUOTES.length)];
@@ -11,12 +12,14 @@ export function renderWelcome(root: HTMLElement) {
       <div class="hero-text">
         <div class="kicker">🔍 Chess Detectives</div>
         <h1>Every mistake is a <span class="hl">clue</span>.</h1>
-        <p class="lead">Connect your chess.com account. We investigate your own games with Stockfish 19, find the mistakes you keep repeating, and turn them into puzzles — with a coach who explains <em>why</em>.</p>
+        <p class="lead">Connect your chess.com account. We investigate your own games with Stockfish 19, find the mistakes you keep repeating, and turn them into puzzles — with <b>Professor Pin</b>, your coach, who explains <em>why</em>.</p>
         <form class="connect" autocomplete="off">
           <label for="uname" class="sr">chess.com username</label>
           <input id="uname" name="uname" placeholder="Your chess.com username" required spellcheck="false" />
           <button class="btn primary big" type="submit">Start investigating →</button>
+          <label class="live-only"><input type="checkbox" name="live" /> Only rapid, blitz and bullet games (skip daily games)</label>
         </form>
+        <div class="gsi-row" hidden><span class="or">or</span>${googleButton()}<span class="sub">Already played here? Sign in to continue on this device.</span></div>
         <p class="err" hidden></p>
         <p class="fine">No password needed — we only read your public games. Everything is stored on this device.</p>
         <blockquote>“${esc(q)}” <cite>— ${esc(who)}</cite></blockquote>
@@ -48,6 +51,9 @@ export function renderWelcome(root: HTMLElement) {
   }, 1300);
 
   const form = root.querySelector('form')!;
+  const showGoogle = () => (($(root, '.gsi-row') as HTMLElement).hidden = !app.cloudEnabled);
+  showGoogle();
+  const offCloud = app.on(showGoogle);
   const err = $(root, '.err');
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -58,7 +64,7 @@ export function renderWelcome(root: HTMLElement) {
     btn.textContent = 'Looking you up…';
     err.hidden = true;
     try {
-      await app.connect(name);
+      await app.connect(name, (form.elements.namedItem('live') as HTMLInputElement).checked);
       location.hash = '#/dashboard?first=1';
     } catch (ex) {
       err.textContent = (ex as Error).message || 'Something went wrong. Please try again.';
@@ -68,6 +74,7 @@ export function renderWelcome(root: HTMLElement) {
     }
   });
   return () => {
+    offCloud();
     clearInterval(timer);
     board.destroy();
   };

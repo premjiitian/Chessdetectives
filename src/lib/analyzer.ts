@@ -62,13 +62,24 @@ export async function analyzeGame(
   for (let ply = 0; ply < parsed.uci.length; ply++) {
     const fen = parsed.fens[ply];
     if (fen.split(' ')[1] !== userTurn) continue;
-    const before = evals[ply];
-    const after = evals[ply + 1];
-    const winBefore = winPercent(before);
-    const winAfter = 100 - winPercent(after);
-    const winLoss = Math.max(0, winBefore - winAfter);
+    let before = evals[ply];
+    let after = evals[ply + 1];
+    let winBefore = winPercent(before);
+    let winAfter = 100 - winPercent(after);
+    let winLoss = Math.max(0, winBefore - winAfter);
+    let sev = severityOf(winLoss);
+    if (sev && sev !== 'inaccuracy' && before.uci[0] && before.uci[0] !== parsed.uci[ply] && winBefore >= 8) {
+      // Second opinion: look deeper before calling it a mistake (cuts false alarms).
+      const deeper = depth + 4;
+      const [b2, a2] = [await evalPosition(engine, fen, deeper), await evalPosition(engine, parsed.fens[ply + 1], deeper)];
+      if (b2.uci.length || b2.mate === 0) before = b2;
+      if (a2.uci.length || a2.mate === 0) after = a2;
+      winBefore = winPercent(before);
+      winAfter = 100 - winPercent(after);
+      winLoss = Math.max(0, winBefore - winAfter);
+      sev = severityOf(winLoss);
+    }
     accs.push(moveAccuracy(winLoss));
-    const sev = severityOf(winLoss);
     const bestUci = before.uci[0];
     if (!sev || sev === 'inaccuracy' || !bestUci || bestUci === parsed.uci[ply]) continue;
     // Already hopeless or still totally winning? Not a useful lesson.
