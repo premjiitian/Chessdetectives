@@ -11,7 +11,8 @@
     "build": "npm run engine && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "node tests/e2e.mjs"
+    "e2e": "node tests/e2e.mjs",
+    "loop": "node scripts/loop.mjs"
   },
   "dependencies": {
     "@diffusionstudio/vits-web": "^1.0.3",
