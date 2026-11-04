@@ -151,7 +151,7 @@ export function outcomeOf(fen: string, line: EngineLine, pov: Side): string {
   if (swing >= 1) return 'You win a pawn and keep the pressure.';
   if (w >= 80) return 'Your position becomes winning.';
   if (w >= 60) return 'You keep a clear advantage.';
-  if (w >= 45) return 'The position stays balanced and healthy.';
+  if (w >= 45) return 'The game stays even.';
   return 'It is the most stubborn defence — damage control matters too.';
 }
 
@@ -185,7 +185,7 @@ export function explainFailure(fen: string, uci: string, reply: EngineLine | und
     out.push(`After ${mv.san}, your opponent has **${r.san}** and a forced checkmate in ${reply.mate}.`);
   } else {
     out.push(`After ${mv.san}, your opponent answers **${r.san}**. ${r.facts.join(' ')}`);
-    if (lost >= 2) out.push(`Overall that line costs you about ${lost} points of material (pawn = 1, knight/bishop = 3, rook = 5, queen = 9).`);
+    if (lost >= 2) out.push(`That costs you about ${lost} points (a pawn is 1, a knight or bishop is 3, a rook is 5, a queen is 9).`);
   }
   if (reply.uci.length > 1) out.push(`A likely continuation: ${numberedLine(after.fen(), reply.uci, 6)}.`);
   return out;

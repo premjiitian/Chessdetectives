@@ -31,7 +31,7 @@ export function toSpeech(text: string): string {
       .replace(/\b\d+\.(\.\.)?\s?(?=[KQRBNO]|[a-h][1-8x])/g, '')
       // Long engine lines and the points legend read badly aloud; they stay on screen.
       .replace(/(Stockfish's main line|A likely continuation|Best line):[^.]*(\.|$)/g, '')
-      .replace(/\(pawn = 1[^)]*\)/g, '')
+      .replace(/\((?:a )?pawn (?:=|is) 1[^)]*\)/g, '')
       .replace(/\b(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?)(?=[\s.,;:!?)—–-]|$)/g, (s) => sayMove(s))
       // Evaluations: "+1.4" -> "plus 1 point 4", "-M2" -> "mate in 2 against you"
       .replace(/-M(\d+)/g, 'mate in $1 against you')

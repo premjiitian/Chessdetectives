@@ -85,7 +85,7 @@ export const THEMES: Record<ThemeId, ThemeInfo> = {
     icon: '📖',
     short: 'An early move broke an opening principle.',
     lesson: 'In the opening: develop knights and bishops, fight for the center, castle early, and don’t move a piece twice without a reason.',
-    hint: 'Think about opening principles: development, center, king safety.',
+    hint: 'Use the opening rules: bring out a new piece, fight for the center, and keep your king safe.',
   },
   'endgame-technique': {
     id: 'endgame-technique',

@@ -23,8 +23,8 @@ const LEVELS = [
 const GRADES = [
   { max: 2, name: 'Best', cls: 'best', say: ['Perfect — that is the engine move!', 'Top move!', 'Exactly what Stockfish wanted.'] },
   { max: 5, name: 'Excellent', cls: 'good', say: ['Excellent move.', 'Very strong.', 'Great choice.'] },
-  { max: 10, name: 'Good', cls: 'ok', say: ['Good, solid move.', 'Fine move.', 'Reasonable.'] },
-  { max: 15, name: 'Inaccuracy', cls: 'inacc', say: ['A small inaccuracy.', 'Slightly imprecise.'] },
+  { max: 10, name: 'Good', cls: 'ok', say: ['Good, solid move.', 'Fine move.', 'That works.'] },
+  { max: 15, name: 'Inaccuracy', cls: 'inacc', say: ['A small slip.', 'Not quite the best.'] },
   { max: 25, name: 'Mistake', cls: 'mist', say: ['That is a mistake.', 'Careful — that lets things slip.'] },
   { max: 101, name: 'Blunder', cls: 'blun', say: ['Ouch — a blunder.', 'That one hurts.'] },
 ];
