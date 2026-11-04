@@ -205,8 +205,13 @@ async function pump() {
     const text = queue.shift()!;
     const clips = settings.engine === 'pin' ? await pinManifest() : {};
     const clip = clips[pinKey(text)];
-    if (queue[0] && !clips[pinKey(queue[0])]) synth(queue[0]); // prepare the next sentence while this one plays
+    const useNatural = !clip && settings.engine !== 'device' && naturalReady;
+    if (useNatural && queue[0] && !clips[pinKey(queue[0])]) synth(queue[0]); // prepare the next sentence while this one plays
     try {
+      if (!clip && !useNatural) {
+        await deviceSpeakAsync(text);
+        continue;
+      }
       const src = clip ? pinUrl(clip) : URL.createObjectURL(await synth(text));
       if (gen !== generation) break;
       await new Promise<void>((resolve) => {
@@ -220,38 +225,44 @@ async function pump() {
         a.play().catch(() => resolve());
       });
     } catch {
-      deviceSpeak(text);
+      await deviceSpeakAsync(text);
     }
   }
   current = null;
   playing = false;
 }
 
-function deviceSpeak(spoken: string) {
-  if (!voiceSupported()) return;
-  const u = new SpeechSynthesisUtterance(spoken);
-  const v = chosenVoice();
-  if (v) u.voice = v;
-  u.lang = v?.lang ?? 'en-US';
-  u.rate = settings.rate;
-  speechSynthesis.speak(u);
+/** Device voice, waiting until the sentence is finished (so voices never overlap). */
+function deviceSpeakAsync(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (!voiceSupported()) return resolve();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = chosenVoice();
+    if (v) u.voice = v;
+    u.lang = v?.lang ?? 'en-US';
+    u.rate = settings.rate;
+    const done = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    // Some browsers never fire 'end' — don't get stuck.
+    const t = setTimeout(done, 1500 + text.length * 90);
+    u.onend = u.onerror = done;
+    speechSynthesis.speak(u);
+  });
 }
+
 
 /** Speak now (queued after anything already being said). */
 export function speak(text: string, force = false) {
   if (!settings.enabled && !force) return;
   const spoken = toSpeech(text);
   if (!spoken) return;
-  if (settings.engine !== 'device' && !naturalFailed) {
-    if (naturalReady) {
-      queue.push(...sentences(spoken));
-      pump();
-      return;
-    }
-    // Still downloading: use the device voice meanwhile.
-    prepareNatural();
-  }
-  deviceSpeak(spoken);
+  // Get the natural voice ready in the background; until then the device voice
+  // reads lines that have no Professor Pin recording.
+  if (settings.engine !== 'device' && !naturalReady && !naturalFailed) prepareNatural();
+  queue.push(...sentences(spoken));
+  pump();
 }
 
 export function stop() {

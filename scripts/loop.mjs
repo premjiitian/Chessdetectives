@@ -24,6 +24,7 @@ const steps = [
   { name: 'Sign-in UI (off / on)', cmd: 'node tests/signin.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Safety + saved progress', cmd: 'node tests/safety.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Offline (no internet)', cmd: 'node tests/offline.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
+  { name: 'Professor Pin voice', cmd: 'node tests/voice.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Walkthrough + screenshots', cmd: 'node tests/e2e.mjs', browser: true, metric: /(No console errors\.)/ },
 ];
 
