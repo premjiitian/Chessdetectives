@@ -193,12 +193,12 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
         </div>
       </div>
       <div class="reveal-row">
-        <button class="chip-reveal" data-reveal="difficulty" aria-label="Reveal difficulty">
+        <button class="chip-reveal" data-reveal="difficulty">
           <span class="chip-k">Difficulty</span>
           <span class="chip-hidden">👁 Tap to reveal</span>
           <span class="chip-shown"><span class="stars" aria-hidden="true">${'★'.repeat(diff.level)}${'☆'.repeat(5 - diff.level)}</span> ${esc(diff.label)} · ≈${diff.rating}</span>
         </button>
-        <button class="chip-reveal" data-reveal="topic" aria-label="Reveal topic">
+        <button class="chip-reveal" data-reveal="topic">
           <span class="chip-k">Topic</span>
           <span class="chip-hidden">👁 Tap to reveal</span>
           <span class="chip-shown">${info.icon} ${esc(info.title)}</span>
