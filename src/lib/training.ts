@@ -153,18 +153,58 @@ export function countBlunderSolves(p: Progress, mistakes: MistakeRecord[]): numb
  * Today's session: due reviews first, then fresh cases from your most common
  * weakness, then a mix. Blunders before mistakes, recent before old.
  */
-export function buildSession(p: Progress, mistakes: MistakeRecord[], size = 6, now = Date.now(), focus?: ThemeId): MistakeRecord[] {
+export function buildSession(
+  p: Progress,
+  mistakes: MistakeRecord[],
+  size = 6,
+  now = Date.now(),
+  focus?: ThemeId,
+  rand: () => number = Math.random,
+): MistakeRecord[] {
   const pool = focus ? mistakes.filter((m) => m.theme === focus) : mistakes;
-  const due = pool.filter((m) => p.cards[m.id] && p.cards[m.id].due <= now).sort((a, b) => p.cards[a.id].due - p.cards[b.id].due);
+  const due = shuffle(pool.filter((m) => p.cards[m.id] && p.cards[m.id].due <= now), rand);
   const fresh = pool.filter((m) => !p.cards[m.id]);
   const counts = new Map<ThemeId, number>();
   for (const m of mistakes) counts.set(m.theme, (counts.get(m.theme) ?? 0) + 1);
-  const score = (m: MistakeRecord) => (counts.get(m.theme) ?? 0) * 2 + (m.severity === 'blunder' ? 5 : 0) + m.endTime / 1e9;
-  fresh.sort((a, b) => score(b) - score(a));
-  const out: MistakeRecord[] = [];
-  for (const m of [...due.slice(0, Math.ceil(size / 2)), ...fresh, ...due]) {
-    if (out.length >= size) break;
-    if (!out.includes(m)) out.push(m);
+  // Your most common mistakes and blunders are more likely to be picked — but
+  // never always the same ones, so every session feels fresh.
+  const weight = (m: MistakeRecord) => 1 + (counts.get(m.theme) ?? 0) * 2 + (m.severity === 'blunder' ? 5 : 0);
+  const picked: MistakeRecord[] = due.slice(0, Math.ceil(size / 2));
+  for (const m of weightedSample(fresh, size - picked.length, weight, rand)) picked.push(m);
+  for (const m of due) if (picked.length < size && !picked.includes(m)) picked.push(m);
+  return spreadGames(shuffle(picked, rand));
+}
+
+export function shuffle<T>(list: T[], rand: () => number = Math.random): T[] {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Picks n items without repeats; heavier items are more likely. */
+function weightedSample<T>(items: T[], n: number, weight: (t: T) => number, rand: () => number): T[] {
+  const left = [...items];
+  const out: T[] = [];
+  while (out.length < n && left.length) {
+    const total = left.reduce((a, t) => a + weight(t), 0);
+    let r = rand() * total;
+    let i = 0;
+    while (i < left.length - 1 && (r -= weight(left[i])) > 0) i++;
+    out.push(left.splice(i, 1)[0]);
+  }
+  return out;
+}
+
+/** Avoids two cases from the same game back to back when possible. */
+function spreadGames(list: MistakeRecord[]): MistakeRecord[] {
+  const out = [...list];
+  for (let i = 1; i < out.length; i++) {
+    if (out[i].gameId !== out[i - 1].gameId) continue;
+    const j = out.findIndex((m, k) => k > i && m.gameId !== out[i - 1].gameId);
+    if (j > 0) [out[i], out[j]] = [out[j], out[i]];
   }
   return out;
 }

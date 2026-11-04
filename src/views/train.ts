@@ -10,7 +10,7 @@ import { THEMES } from '../lib/themes';
 import { sanOf } from '../lib/tactics';
 import { difficultyOf } from '../lib/difficulty';
 import { CHAPTERS, chapterByEp, practiceFor, thumb } from '../lib/chapters';
-import { buildSession, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
+import { buildSession, shuffle, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
 import type { EngineLine, MistakeRecord, ThemeId } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, confetti, esc, longDate, md, timeAgo, timeControlLabel, toast } from '../ui/dom';
@@ -33,7 +33,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       ? (() => {
           const pool = practiceFor(chapter, all);
           const due = pool.filter((m) => !p.cards[m.id] || p.cards[m.id].due <= Date.now());
-          return (due.length ? due : pool).slice(0, 6);
+          return shuffle(due.length ? due : pool).slice(0, 6);
         })()
       : buildSession(p, all, 6, Date.now(), theme ?? undefined);
   }

@@ -115,11 +115,36 @@ describe('training loop', () => {
   });
   it('builds a session with due reviews and fresh cases', () => {
     const p = emptyProgress('x');
-    const ms = Array.from({ length: 10 }, (_, i) => ({ ...m, id: 'm' + i, endTime: i }));
+    const ms = Array.from({ length: 10 }, (_, i) => ({ ...m, id: 'm' + i, endTime: i, gameId: 'g' + (i % 3) }));
     recordResult(p, ms[0], 'failed', 0);
     const s = buildSession(p, ms, 6, 10 ** 9);
     expect(s).toHaveLength(6);
-    expect(s[0].id).toBe('m0');
+    expect(s.map((x) => x.id)).toContain('m0'); // the due review is always included
+    expect(new Set(s.map((x) => x.id)).size).toBe(6); // no repeats
+  });
+  it('randomizes: sessions do not always start with the same puzzle', () => {
+    const p = emptyProgress('x');
+    const ms = Array.from({ length: 20 }, (_, i) => ({ ...m, id: 'm' + i, endTime: i, gameId: 'g' + i }));
+    const firsts = new Set(Array.from({ length: 30 }, () => buildSession(p, ms, 6)[0].id));
+    expect(firsts.size).toBeGreaterThan(5);
+  });
+  it('still favours your most common mistakes', () => {
+    const p = emptyProgress('x');
+    const ms = [
+      ...Array.from({ length: 8 }, (_, i) => ({ ...m, id: 'fork' + i, theme: 'missed-fork', severity: 'blunder', gameId: 'f' + i })),
+      ...Array.from({ length: 8 }, (_, i) => ({ ...m, id: 'rare' + i, theme: i ? 'opening-slip' + i : 'opening-slip', severity: 'mistake', gameId: 'r' + i })),
+    ];
+    let forks = 0;
+    for (let t = 0; t < 200; t++) forks += buildSession(p, ms as any, 4).filter((x) => x.id.startsWith('fork')).length;
+    expect(forks / 800).toBeGreaterThan(0.6);
+  });
+  it('avoids two cases from the same game in a row', () => {
+    const p = emptyProgress('x');
+    const ms = Array.from({ length: 6 }, (_, i) => ({ ...m, id: 'm' + i, gameId: i < 3 ? 'A' : 'B' }));
+    for (let t = 0; t < 50; t++) {
+      const s = buildSession(p, ms, 6);
+      for (let i = 1; i < s.length; i++) expect(s[i].gameId === s[i - 1].gameId && s.slice(i).some((x) => x.gameId !== s[i].gameId)).toBe(false);
+    }
   });
   it('ranks go up with XP', () => {
     expect(rankOf(0).title).toBe('Rookie Sleuth');
@@ -235,5 +260,24 @@ describe('evaluation coaching', () => {
   it('reads evaluations aloud correctly', () => {
     expect(toSpeech('📊 Evaluation: +0.3 (about equal) → -2.5 (clearly better for your opponent).')).toBe('Evaluation: plus 0 point 3 (about equal), now minus 2 point 5 (clearly better for your opponent).');
     expect(toSpeech('After 19.Qb3 it is -M2.')).toBe('After Queen b3 it is mate in 2 against you.');
+  });
+});
+
+import { weeklyTrend } from '../src/lib/stats';
+describe('weekly trend', () => {
+  it('buckets analyzed games by week, oldest first', () => {
+    const now = 100 * 7 * 86400;
+    const g = (id: string, weeksAgo: number) => ({ id, endTime: now - weeksAgo * 7 * 86400 - 3600 }) as any;
+    const games = [g('a', 0), g('b', 0), g('c', 2)];
+    const an = new Map<string, any>([
+      ['a', { accuracy: 90, mistakes: [] }],
+      ['b', { accuracy: 70, mistakes: [{ severity: 'blunder' }] }],
+      ['c', { accuracy: 60, mistakes: [{ severity: 'blunder' }, { severity: 'blunder' }] }],
+    ]);
+    const t = weeklyTrend(games, an, 3, now);
+    expect(t.map((p) => p.games)).toEqual([1, 0, 2]);
+    expect(t[2].accuracy).toBe(80);
+    expect(t[2].blundersPerGame).toBe(0.5);
+    expect(t[0].blundersPerGame).toBe(2);
   });
 });

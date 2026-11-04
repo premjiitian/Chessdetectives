@@ -1,5 +1,5 @@
 import { app, LIVE_TIME_CLASSES, PERIODS, TIME_CLASSES, type PeriodId } from '../lib/app';
-import { headline, periodStats } from '../lib/stats';
+import { headline, periodStats, weeklyTrend, type WeekPoint } from '../lib/stats';
 import { THEMES } from '../lib/themes';
 import { recommendChapter, thumb } from '../lib/chapters';
 import { buildSession } from '../lib/training';
@@ -99,6 +99,8 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       ${kpi('Blunders / game', s.blundersPerGame === null ? '—' : s.blundersPerGame.toFixed(1), 'big swings (≥20%)')}
       ${kpi('Rating', s.ratingNow === null ? '—' : String(s.ratingNow), s.ratingChange === null ? '' : `${s.ratingChange >= 0 ? '▲' : '▼'} ${Math.abs(s.ratingChange)} this period`, s.ratingChange !== null && s.ratingChange < 0 ? 'down' : 'up')}
     </section>
+
+    ${trendCard(weeklyTrend(app.gamesIn(Math.max(d, 84)), app.analyses, Math.min(26, Math.max(6, Math.round(Math.max(d, 84) / 7)))))}
 
     <section class="grid-main">
       <div class="card">
@@ -243,4 +245,46 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
 
 function kpi(label: string, value: string, sub: string, cls = '') {
   return `<div class="card kpi"><span class="k-label">${esc(label)}</span><span class="k-value">${esc(value)}</span><span class="k-sub ${cls}">${esc(sub)}</span></div>`;
+}
+
+/** Two small charts: accuracy (higher is better) and blunders per game (lower is better). */
+function trendCard(points: WeekPoint[]): string {
+  const withData = points.filter((p) => p.games > 0);
+  if (withData.length < 3) return '';
+  const W = 560, H = 120, pad = 22;
+  const x = (i: number) => pad + (i * (W - pad * 2)) / Math.max(1, points.length - 1);
+  const chart = (key: 'accuracy' | 'blundersPerGame', label: string, better: string, fmt: (v: number) => string) => {
+    const vals = points.map((p) => p[key]);
+    const real = vals.filter((v): v is number => v !== null);
+    const lo = key === 'accuracy' ? Math.max(0, Math.min(...real) - 5) : 0;
+    const hi = key === 'accuracy' ? Math.min(100, Math.max(...real) + 5) : Math.max(1, ...real);
+    const y = (v: number) => H - pad - ((v - lo) / Math.max(0.0001, hi - lo)) * (H - pad * 2);
+    const pts = vals.map((v, i) => (v === null ? null : [x(i), y(v)] as const)).filter((p): p is readonly [number, number] => !!p);
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    const first = real.slice(0, Math.ceil(real.length / 2));
+    const last = real.slice(Math.floor(real.length / 2));
+    const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+    const change = avg(last) - avg(first);
+    const good = key === 'accuracy' ? change > 0.5 : change < -0.05;
+    const bad = key === 'accuracy' ? change < -0.5 : change > 0.05;
+    const verdict = good ? `<span class="trend good">✓ improving</span>` : bad ? `<span class="trend bad">⚠ needs attention</span>` : `<span class="trend">● steady</span>`;
+    const lastV = real[real.length - 1];
+    return `<figure class="spark">
+      <figcaption><b>${label}</b> <span class="sub">(${better})</span> ${verdict}</figcaption>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label} by week: latest ${fmt(lastV)}">
+        <line x1="${pad}" x2="${W - pad}" y1="${H - pad}" y2="${H - pad}" class="axis" />
+        <path d="${path}" class="line ${key}" fill="none" />
+        ${pts.map((p, i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i === pts.length - 1 ? 4.5 : 3}" class="dot ${key}" />`).join('')}
+        <text x="${(pts[pts.length - 1]?.[0] ?? 0) - 4}" y="${(pts[pts.length - 1]?.[1] ?? 0) - 9}" text-anchor="end" class="val">${fmt(lastV)}</text>
+      </svg>
+    </figure>`;
+  };
+  return `<section class="card trend-card">
+    <h2>Your trend, week by week</h2>
+    <p class="sub">${withData.length} weeks with analyzed games. Fixing your own mistakes should push accuracy up and blunders down.</p>
+    <div class="sparks">
+      ${chart('accuracy', 'Accuracy', 'higher is better', (v) => `${Math.round(v)}%`)}
+      ${chart('blundersPerGame', 'Blunders per game', 'lower is better', (v) => v.toFixed(1))}
+    </div>
+  </section>`;
 }
