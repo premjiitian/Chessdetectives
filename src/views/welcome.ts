@@ -16,6 +16,7 @@ export function renderWelcome(root: HTMLElement) {
           <label for="uname" class="sr">chess.com username</label>
           <input id="uname" name="uname" placeholder="Your chess.com username" required spellcheck="false" />
           <button class="btn primary big" type="submit">Start investigating →</button>
+          <label class="live-only"><input type="checkbox" name="live" /> Only rapid, blitz and bullet games (skip daily games)</label>
         </form>
         <p class="err" hidden></p>
         <p class="fine">No password needed — we only read your public games. Everything is stored on this device.</p>
@@ -58,7 +59,7 @@ export function renderWelcome(root: HTMLElement) {
     btn.textContent = 'Looking you up…';
     err.hidden = true;
     try {
-      await app.connect(name);
+      await app.connect(name, (form.elements.namedItem('live') as HTMLInputElement).checked);
       location.hash = '#/dashboard?first=1';
     } catch (ex) {
       err.textContent = (ex as Error).message || 'Something went wrong. Please try again.';

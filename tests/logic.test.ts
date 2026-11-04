@@ -181,3 +181,22 @@ describe('voice coach wording', () => {
     expect(toSpeech('Chances fell from 82% to 46%')).toBe('Chances fell from 82 percent to 46 percent');
   });
 });
+
+import { app } from '../src/lib/app';
+describe('game-type filter', () => {
+  it('keeps only the chosen speeds in stats and puzzles', async () => {
+    const now = Date.now() / 1000;
+    const g = (id: string, timeClass: string) => ({ id, timeClass, endTime: now - 3600 }) as any;
+    app.games = [g('a', 'bullet'), g('b', 'blitz'), g('c', 'rapid'), g('d', 'daily')];
+    app.analyses = new Map([
+      ['a', { gameId: 'a', mistakes: [{ id: 'a#1', timeClass: 'bullet', endTime: now }] } as any],
+      ['d', { gameId: 'd', mistakes: [{ id: 'd#1', timeClass: 'daily', endTime: now }] } as any],
+    ]);
+    await app.setTimeClasses(['bullet', 'blitz', 'rapid']);
+    expect(app.gamesIn(30).map((x) => x.id)).toEqual(['a', 'b', 'c']);
+    expect(app.mistakes().map((m) => m.id)).toEqual(['a#1']);
+    await app.setTimeClasses([]); // empty = everything again
+    expect(app.gamesIn(30)).toHaveLength(4);
+    expect(app.mistakes()).toHaveLength(2);
+  });
+});

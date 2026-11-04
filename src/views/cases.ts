@@ -37,6 +37,7 @@ export function renderCases(view: HTMLElement, params: URLSearchParams) {
           .join('')}</select>
         <select data-f="severity"><option value="">Mistakes & blunders</option><option value="blunder" ${severity === 'blunder' ? 'selected' : ''}>Blunders only</option><option value="mistake" ${severity === 'mistake' ? 'selected' : ''}>Mistakes only</option></select>
         <select data-f="status"><option value="">Any status</option>${['new', 'due', 'solved'].map((s) => `<option value="${s}" ${s === status ? 'selected' : ''}>${s[0].toUpperCase() + s.slice(1)}</option>`).join('')}</select>
+        <a class="sub" href="#/dashboard" title="Change on the dashboard">Game types: ${esc(app.timeClasses.length === 4 ? 'all' : app.timeClasses.join(', '))}</a>
         <span class="count">${list.length} case${list.length === 1 ? '' : 's'}</span>
       </div>
       ${list.length ? `<div class="case-grid">${list

@@ -18,6 +18,16 @@ export const PERIODS = [
 ] as const;
 export type PeriodId = (typeof PERIODS)[number]['id'];
 
+/** chess.com game speeds you can include or leave out. */
+export const TIME_CLASSES = [
+  { id: 'bullet', label: 'Bullet', icon: '⚡' },
+  { id: 'blitz', label: 'Blitz', icon: '🔥' },
+  { id: 'rapid', label: 'Rapid', icon: '⏱️' },
+  { id: 'daily', label: 'Daily', icon: '📅' },
+] as const;
+export const ALL_TIME_CLASSES = TIME_CLASSES.map((t) => t.id as string);
+export const LIVE_TIME_CLASSES = ['bullet', 'blitz', 'rapid'];
+
 export interface AnalysisJob {
   total: number;
   done: number;
@@ -38,6 +48,8 @@ class AppState {
   job: AnalysisJob | null = null;
   fetching: { done: number; total: number } | null = null;
   depth = 10;
+  /** Which game speeds count everywhere (stats, analysis, puzzles). */
+  timeClasses: string[] = [...ALL_TIME_CLASSES];
   private cancelJob = false;
   private listeners = new Set<Listener>();
   private analysisEngine: Engine | null = null;
@@ -66,15 +78,17 @@ class AppState {
     this.analyses = new Map(list.map((a) => [a.gameId, a]));
     this.progress = await loadProgress(u);
     this.depth = (await store.get<number>('depth')) ?? 10;
+    this.timeClasses = (await store.get<string[]>(`time-classes:${u}`)) ?? [...ALL_TIME_CLASSES];
     this.lastSyncAt = (await store.get<number>(`last-sync:${u}`)) ?? 0;
   }
 
-  async connect(username: string) {
+  async connect(username: string, liveOnly = false) {
     const profile = await fetchProfile(username);
     const u = profile.username.toLowerCase();
     await store.set(`profile:${u}`, profile);
     await store.set('current-user', u);
     await this.load(u);
+    if (liveOnly) await this.setTimeClasses(LIVE_TIME_CLASSES);
     this.profile = profile;
     this.emit();
   }
@@ -122,13 +136,28 @@ class AppState {
     const now = Date.now() / 1000;
     const to = now - offsetDays * 86400;
     const from = to - days * 86400;
-    return this.games.filter((g) => g.endTime > from && g.endTime <= to);
+    return this.games.filter((g) => g.endTime > from && g.endTime <= to && this.includes(g.timeClass));
+  }
+
+  /** Is this game speed switched on? (Anything unusual counts as daily.) */
+  includes(timeClass: string): boolean {
+    const tc = (ALL_TIME_CLASSES as string[]).includes(timeClass) ? timeClass : 'daily';
+    return this.timeClasses.includes(tc);
+  }
+
+  async setTimeClasses(list: string[]) {
+    this.timeClasses = list.length ? list : [...ALL_TIME_CLASSES];
+    if (this.username) await store.set(`time-classes:${this.username}`, this.timeClasses);
+    this.emit();
   }
 
   mistakes(days?: number): MistakeRecord[] {
     const games = days ? new Set(this.gamesIn(days).map((g) => g.id)) : null;
     const out: MistakeRecord[] = [];
-    for (const a of this.analyses.values()) if (!games || games.has(a.gameId)) out.push(...a.mistakes);
+    for (const a of this.analyses.values()) {
+      if (games && !games.has(a.gameId)) continue;
+      out.push(...a.mistakes.filter((m) => this.includes(m.timeClass)));
+    }
     return out.sort((a, b) => b.endTime - a.endTime);
   }
 

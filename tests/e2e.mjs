@@ -78,6 +78,16 @@ const kpis = await page.$$eval('.kpi .k-value', (els) => els.map((e) => e.textCo
 console.log('  KPIs', kpis.join(' | '));
 console.log('  themes', (await page.$$eval('.themes li strong', (e) => e.map((x) => x.textContent))).join(', '));
 
+step('live games only');
+const gamesAll = await page.$eval('.kpi .k-value', (e) => e.textContent);
+await page.click('[data-live]');
+await page.waitForTimeout(400);
+const gamesLive = await page.$eval('.kpi .k-value', (e) => e.textContent);
+console.log(`  games (all types): ${gamesAll} → live only: ${gamesLive}`, '| chips:', await page.$$eval('.sp', (e) => e.map((x) => (x.classList.contains('on') ? '✓' : '✗') + x.textContent.trim()).join(' ')));
+await page.locator('.speeds').screenshot({ path: `${OUT}/02b-game-types.png` });
+await page.click('[data-all]');
+await page.waitForTimeout(300);
+
 step('period switch');
 await page.click('[data-period="7d"]');
 await page.waitForTimeout(500);

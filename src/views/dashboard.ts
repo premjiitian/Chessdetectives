@@ -1,4 +1,4 @@
-import { app, PERIODS, type PeriodId } from '../lib/app';
+import { app, LIVE_TIME_CLASSES, PERIODS, TIME_CLASSES, type PeriodId } from '../lib/app';
 import { headline, periodStats } from '../lib/stats';
 import { THEMES } from '../lib/themes';
 import { buildSession } from '../lib/training';
@@ -26,6 +26,7 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     const totalPhase = Math.max(1, s.phases.opening + s.phases.middlegame + s.phases.endgame);
     const name = app.profile?.name?.split(' ')[0] || app.profile?.username || app.username;
     const pct = (n: number) => Math.round(n * 100);
+    const liveOnly = app.timeClasses.length === 3 && LIVE_TIME_CLASSES.every((t) => app.timeClasses.includes(t));
 
     view.innerHTML = `
     <section class="dash-head">
@@ -36,6 +37,17 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       <div class="tabs" role="tablist">
         ${PERIODS.map((p) => `<button role="tab" data-period="${p.id}" class="${p.id === period ? 'on' : ''}">${p.label}</button>`).join('')}
       </div>
+    </section>
+
+    <section class="speeds" aria-label="Game types">
+      <span class="sp-label">Game types:</span>
+      ${TIME_CLASSES.map((t) => {
+        const on = app.timeClasses.includes(t.id);
+        const n = app.games.filter((g) => (g.timeClass === t.id || (t.id === 'daily' && !['bullet', 'blitz', 'rapid'].includes(g.timeClass))) && g.endTime > Date.now() / 1000 - d * 86400).length;
+        return `<button class="sp ${on ? 'on' : ''}" data-tc="${t.id}" aria-pressed="${on}">${t.icon} ${t.label} <small>${n}</small></button>`;
+      }).join('')}
+      <button class="btn small ghost" data-live ${liveOnly ? 'disabled' : ''}>Live games only</button>
+      ${app.timeClasses.length < TIME_CLASSES.length ? '<button class="btn small ghost" data-all>Show all</button>' : ''}
     </section>
 
     <section class="status card">
@@ -136,6 +148,16 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
         }
       }),
     );
+    view.querySelectorAll<HTMLButtonElement>('[data-tc]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const id = b.dataset.tc!;
+        const next = app.timeClasses.includes(id) ? app.timeClasses.filter((t) => t !== id) : [...app.timeClasses, id];
+        if (!next.length) return toast('Keep at least one game type switched on.', 'info');
+        app.setTimeClasses(next);
+      }),
+    );
+    view.querySelector('[data-live]')?.addEventListener('click', () => app.setTimeClasses(LIVE_TIME_CLASSES));
+    view.querySelector('[data-all]')?.addEventListener('click', () => app.setTimeClasses([]));
     view.querySelector('[data-analyze]')?.addEventListener('click', (e) => {
       const n = Number((e.currentTarget as HTMLElement).dataset.analyze);
       app.analyze(days(), n);
@@ -146,7 +168,7 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     sig = signature();
   };
 
-  const signature = () => `${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? 1 : 0}|${period}|${app.progress?.xp}`;
+  const signature = () => `${app.timeClasses.join(',')}|${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? 1 : 0}|${period}|${app.progress?.xp}`;
 
   const statusHtml = (games: number, analyzed: number, pending: number) => {
     if (app.fetching) {
@@ -186,6 +208,8 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       if (params.has('first') || app.analyses.size === 0) {
         if (app.games.length) app.analyze(Math.max(30, days()), 20);
         else toast('No standard chess games found in the last 120 days. Try a longer period.', 'warn', 6000);
+        if (app.games.length && !app.gamesIn(Math.max(30, days())).length)
+          toast('No games of the selected types in this period — try switching on more game types.', 'info', 6000);
       }
     } catch (e) {
       toast(esc((e as Error).message), 'warn', 6000);
