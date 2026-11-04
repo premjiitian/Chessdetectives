@@ -240,3 +240,29 @@ export const QUOTES = [
   ['When you see a good move, look for a better one.', 'Emanuel Lasker'],
   ['The threat is stronger than the execution.', 'Aron Nimzowitsch'],
 ];
+
+/** "+1.4" style number plus plain words, from YOUR point of view. */
+export function evalWords(line: Pick<EngineLine, 'cp' | 'mate'>): string {
+  if (line.mate !== null && line.mate !== undefined) {
+    if (line.mate > 0) return `M${line.mate} (a forced checkmate for you)`;
+    if (line.mate < 0) return `-M${-line.mate} (a forced checkmate for your opponent)`;
+    return 'checkmate';
+  }
+  const v = (line.cp ?? 0) / 100;
+  const num = (v > 0 ? '+' : '') + v.toFixed(1);
+  const a = Math.abs(v);
+  const side = v > 0 ? 'you' : 'your opponent';
+  const words =
+    a < 0.5 ? 'about equal'
+    : a < 1.5 ? `a small edge for ${side}`
+    : a < 3 ? `clearly better for ${side}`
+    : a < 6 ? `winning for ${side} — like being a piece up`
+    : `completely winning for ${side}`;
+  return `${num} (${words})`;
+}
+
+/** One sentence about how a move changed the evaluation. */
+export function evalChange(before: Pick<EngineLine, 'cp' | 'mate'>, after: Pick<EngineLine, 'cp' | 'mate'>): string {
+  const same = evalWords(before) === evalWords(after);
+  return same ? `📊 Evaluation stays at ${evalWords(after)}.` : `📊 Evaluation: ${evalWords(before)} → ${evalWords(after)}.`;
+}

@@ -222,3 +222,18 @@ describe('chapters', () => {
     expect(recommendChapter([])?.ep).toBe(1);
   });
 });
+
+import { evalWords, evalChange } from '../src/lib/coach';
+describe('evaluation coaching', () => {
+  it('explains evaluations in plain words from your side', () => {
+    expect(evalWords({ cp: 20, mate: null })).toBe('+0.2 (about equal)');
+    expect(evalWords({ cp: -240, mate: null })).toBe('-2.4 (clearly better for your opponent)');
+    expect(evalWords({ cp: 420, mate: null })).toMatch(/winning for you/);
+    expect(evalWords({ cp: null, mate: -2 })).toMatch(/checkmate for your opponent/);
+    expect(evalChange({ cp: 30, mate: null }, { cp: -250, mate: null })).toBe('📊 Evaluation: +0.3 (about equal) → -2.5 (clearly better for your opponent).');
+  });
+  it('reads evaluations aloud correctly', () => {
+    expect(toSpeech('📊 Evaluation: +0.3 (about equal) → -2.5 (clearly better for your opponent).')).toBe('Evaluation: plus 0 point 3 (about equal), now minus 2 point 5 (clearly better for your opponent).');
+    expect(toSpeech('After 19.Qb3 it is -M2.')).toBe('After Queen b3 it is mate in 2 against you.');
+  });
+});

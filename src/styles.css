@@ -254,6 +254,7 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .msg.lesson { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
 .msg h4 { margin: 0 0 4px; }
 .bad-move { color: var(--bad-ink); }
+.eval-line { font-weight: 600; font-variant-numeric: tabular-nums; }
 @keyframes pop { from { opacity: 0; transform: translateY(6px); } }
 .controls { display: flex; gap: 10px; flex-wrap: wrap; }
 .controls .btn.primary { margin-left: auto; }
@@ -279,6 +280,17 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .grade.ok { background: var(--accent-soft); color: var(--accent-ink); }
 .grade.inacc { background: var(--alt-soft); color: var(--alt-ink); }
 .grade.mist, .grade.blun { background: var(--bad-soft); color: var(--bad-ink); }
+
+/* new-user path */
+.path { margin-bottom: 16px; padding: 14px 18px; }
+.path ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; counter-reset: step; }
+.path li a { display: grid; grid-template-columns: 34px 1fr; column-gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); color: var(--ink); background: var(--bg); }
+.path li a:hover { border-color: var(--accent); }
+.path li span { grid-row: span 2; font-size: 1.5rem; text-align: center; }
+.path li small { color: var(--muted); }
+.path li.done a { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.path li.done b::after { content: ' ✓'; color: var(--good-ink); }
+@media (max-width: 820px) { .path ol { grid-template-columns: 1fr; } }
 
 /* chapters (video course) */
 .ch-progress { margin: -4px 0 16px; }
@@ -426,8 +438,12 @@ section.card { margin-bottom: 16px; }
   .hero { grid-template-columns: 1fr; gap: 28px; }
   .topbar { flex-wrap: wrap; padding: 8px 16px; gap: 8px; }
   .topbar nav { order: 3; flex-basis: 100%; overflow-x: auto; }
-  .topbar nav a span:not(.ico) { display: none; }
-  .topbar nav a { flex: 1; justify-content: center; font-size: 1.2rem; }
+  /* Phone menu: icon with a small word under it, so nothing is a guess. */
+  .topbar nav { gap: 2px; }
+  .topbar nav a { flex: 1; flex-direction: column; gap: 0; justify-content: center; padding: 5px 2px; font-size: 1.15rem; line-height: 1.1; }
+  .topbar nav a span:not(.ico) { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.01em; }
+  .cta { flex-direction: column; align-items: flex-start; text-align: left; }
+  .cta .btn { align-self: stretch; }
   .who .uname { display: none; }
   main { padding: 16px; }
   .welcome { padding: 24px 16px; }

@@ -151,14 +151,22 @@ const connect = async (page, name) => {
 
   // b) a bad move
   const top = new Set(st.lines.map((l) => l.uci));
+  // pick the worst-looking legal move we can find quickly: one that isn't in the engine's top lines
   const bad = st.legal.find((u) => !top.has(u));
+  const barBefore = await page.$eval('.evalbar i', (e) => e.style.height);
   await move(bad, color);
   await page.waitForSelector('.msg.bad', { timeout: 60000 }).catch(() => {});
   const t2 = await page.$eval('.feed', (e) => e.innerText);
+  const barAfter = await page.$eval('.evalbar i', (e) => e.style.height);
   check('bad move gets an explanation and Stockfish shows the punishment', /Not quite|move you played/.test(t2) && /answers/.test(t2));
+  check('evaluation bar moves after a wrong move', barBefore !== barAfter, `${barBefore} → ${barAfter}`);
+  const evalMsg = (t2.match(/📊 Evaluation:[^\n]*/) ?? [''])[0];
+  check('Professor Pin states the evaluation before → after and explains why', /→/.test(evalMsg) && /Why\?/.test(t2), evalMsg);
   await page.click('.msg.coach button:not(.replay)').catch(() => {});
   st = await until((s) => s.interactive);
   check('board resets after "Try again"', !!st && st.interactive);
+  await page.waitForTimeout(300);
+  check('evaluation bar returns after "Try again"', (await page.$eval('.evalbar i', (e) => e.style.height)) === barBefore);
 
   // c) all hints, then the solution
   for (let i = 0; i < 4; i++) await page.click('[data-act=hint]').catch(() => {});

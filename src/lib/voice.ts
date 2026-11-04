@@ -28,11 +28,19 @@ export function toSpeech(text: string): string {
   return (
     text
       // 18...Qb6 / 19.Qb3 -> drop move numbers
-      .replace(/\b\d+\.(\.\.)?\s?/g, '')
+      .replace(/\b\d+\.(\.\.)?\s?(?=[KQRBNO]|[a-h][1-8x])/g, '')
       // Long engine lines and the points legend read badly aloud; they stay on screen.
       .replace(/(Stockfish's main line|A likely continuation|Best line):[^.]*(\.|$)/g, '')
       .replace(/\(pawn = 1[^)]*\)/g, '')
       .replace(/\b(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](=[QRBN])?[+#]?)(?=[\s.,;:!?)—–-]|$)/g, (s) => sayMove(s))
+      // Evaluations: "+1.4" -> "plus 1 point 4", "-M2" -> "mate in 2 against you"
+      .replace(/-M(\d+)/g, 'mate in $1 against you')
+      .replace(/\bM(\d+)\b/g, 'mate in $1')
+      .replace(/\+(\d+\.\d)/g, 'plus $1')
+      .replace(/(^|[\s(])[-−](\d+\.\d)/g, '$1minus $2')
+      .replace(/(\d)\.(\d)/g, '$1 point $2')
+      .replace(/📊/g, '')
+      .replace(/→/g, ', now')
       .replace(/[★☆]/g, '')
       .replace(/≈/g, 'about ')
       .replace(/%/g, ' percent')

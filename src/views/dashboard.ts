@@ -32,8 +32,8 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     view.innerHTML = `
     <section class="dash-head">
       <div>
-        <h1>Welcome back, ${esc(name)} 👋</h1>
-        <p class="headline">${esc(headline(s))}</p>
+        <h1>${(app.progress?.xp ?? 0) > 0 || app.analyses.size > 25 ? 'Welcome back' : 'Welcome'}, ${esc(name)} 👋</h1>
+        <p class="headline">${esc(app.job && s.analyzed < 5 ? `Professor Pin is studying your games (${s.analyzed} of ${s.games} done) — your patterns appear here as clues come in.` : headline(s))}</p>
       </div>
       <div class="tabs" role="tablist">
         ${PERIODS.map((p) => `<button role="tab" data-period="${p.id}" class="${p.id === period ? 'on' : ''}">${p.label}</button>`).join('')}
@@ -55,6 +55,19 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       ${statusHtml(games.length, s.analyzed, pending)}
     </section>
 
+    ${
+      (app.progress?.xp ?? 0) < 150
+        ? `<section class="path card" aria-label="How to use Chess Detectives">
+            <span class="k-label">Your detective path</span>
+            <ol>
+              <li class="${(app.progress?.chapters?.length ?? 0) > 0 ? 'done' : ''}"><a href="#/chapters"><span>📺</span><b>Watch a chapter</b><small>Professor Pin explains one idea</small></a></li>
+              <li class="${Object.keys(app.progress?.cards ?? {}).length > 0 ? 'done' : ''}"><a href="#/train"><span>🧩</span><b>Solve your own cases</b><small>Puzzles from your games</small></a></li>
+              <li><a href="#/play"><span>♟️</span><b>Prove it vs Stockfish</b><small>Play the position out</small></a></li>
+            </ol>
+          </section>`
+        : ''
+    }
+
     <section class="grid-2">
       <a class="card cta" href="#/train">
         <div class="cta-ico">🧩</div>
@@ -62,7 +75,7 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
           <h2>Today's case files</h2>
           <p>${session.length ? `${session.length} puzzles from your own games are waiting${due ? ` · ${due} review${due > 1 ? 's' : ''} due` : ''}.` : 'Analyze a few games to unlock your personal puzzles.'}</p>
         </div>
-        <span class="btn primary">${session.length ? 'Start training →' : 'Waiting for clues'}</span>
+        ${session.length ? '<span class="btn primary">Start training →</span>' : `<span class="sub">${app.job ? '⏳ Puzzles appear as games are analyzed' : 'Press “Analyze” above to find your puzzles'}</span>`}
       </a>
       ${(() => {
         const rec = recommendChapter(app.mistakes(d), app.progress?.chapters ?? []);

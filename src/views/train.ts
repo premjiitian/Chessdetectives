@@ -3,7 +3,7 @@
 
 import { app } from '../lib/app';
 import { parsePgn } from '../lib/analyzer';
-import { explainAlternative, explainBest, explainFailure, hints, numberedLine, QUOTES, type HintStep } from '../lib/coach';
+import { evalChange, evalWords, explainAlternative, explainBest, explainFailure, hints, numberedLine, QUOTES, type HintStep } from '../lib/coach';
 import { getEngine } from '../lib/engine';
 import { flip, formatEval, winPercent } from '../lib/evaluation';
 import { THEMES } from '../lib/themes';
@@ -263,6 +263,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     top.then((lines) => {
       if (destroyed || thisCase !== m || !lines[0]) return;
       setEval(lines[0], true);
+      if (!solved && !busy) say(`<p class="eval-line">${esc(`📊 Right now Stockfish rates this position ${evalWords(lines[0])}. Find the move that keeps it that way.`)}</p>`);
       // The deeper search is the referee: hints follow its best move.
       hintSteps = hints(m.fenBefore, lines[0].uci[0], info.hint);
       // Quality check: if your game move turns out to be fine, skip this case.
@@ -313,22 +314,25 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const bestWin = winPercent(best);
     const myWin = line ? winPercent(line) : 0;
     const gap = bestWin - myWin;
+    // The bar follows the move you just tried (your point of view).
+    setEval(line ?? best, true);
+    const evalLine = line ? `<p class="eval-line">${esc(evalChange(best, line))}</p>` : '';
 
     if (gap <= ACCEPT || uci === best.uci[0]) {
       await correct(fen, line ?? best);
     } else if (uci === m.playedUci && steps === 0) {
       fails++;
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
-      say(`<p><b>That's the move you played in the game!</b> Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
+      say(`<p><b>That's the move you played in the game!</b></p>${evalLine}<p>Why? Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
       await punish(r);
     } else if (gap <= ALTERNATIVE || (myWin >= 55 && gap <= 15)) {
-      say(paras(explainAlternative(fen, uci, myWin, bestWin)), 'alt');
+      say(`${paras(explainAlternative(fen, uci, myWin, bestWin))}${line ? `<p class="eval-line">📊 Your move: ${esc(evalWords(line))}. The best move: ${esc(evalWords(best))}.</p>` : ''}`, 'alt');
       await sleep(400);
       tryAgainButton('Find the stronger move');
     } else {
       fails++;
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
-      say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
+      say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${evalLine}<p>Why?</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
       await punish(r);
     }
   }
@@ -354,6 +358,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
 
   function resetStep() {
     if (!board) return;
+    top.then((l) => !destroyed && setEval(l[0], true));
     board.setPosition(stepFen, steps === 0 ? lastMove : undefined);
     board.shapes([]);
     board.setInteractive(true);
@@ -364,7 +369,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     if (!board) return;
     steps++;
     const quality = line.uci[0] === (await top)[0]?.uci[0] ? 'the best move' : 'just as strong as the engine move';
-    say(`<p><b>${['Excellent!', 'Brilliant detective work!', 'Spot on!', 'Yes — that\'s it!'][steps % 4]}</b> That's ${quality}.</p>${paras(explainBest(fen, line))}`, 'good');
+    say(`<p><b>${['Excellent!', 'Brilliant detective work!', 'Spot on!', 'Yes — that\'s it!'][steps % 4]}</b> That's ${quality}.</p>${paras(explainBest(fen, line))}<p class="eval-line">${esc(`📊 Evaluation: ${evalWords(line)}.`)}</p>`, 'good');
     board.shapes([board.arrow(line.uci[0].slice(0, 2), line.uci[0].slice(2, 4), 'green')]);
 
     const after = board.chess;
