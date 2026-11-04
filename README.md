@@ -58,6 +58,8 @@ On iPad every browser — Safari *and* Chrome — uses Apple's WebKit engine, so
 finger-sized buttons, tap-a-piece-then-a-square moves, no accidental page zoom or scrolling while moving pieces,
 a board that fits portrait and landscape, and audio that keeps working after the first tap.
 
+**Works offline:** after the first visit, puzzles from already analyzed games, Stockfish and Professor Pin work without internet (great in the car).
+
 **Tip:** in Safari tap **Share → Add to Home Screen** — Chess Detectives then opens full-screen like an app, with its own icon.
 
 Quick check on a real iPad (2 minutes):

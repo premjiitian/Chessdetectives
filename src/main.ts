@@ -110,5 +110,20 @@ app.restore().then(() => {
   route();
   app.initCloud();
 });
+// Offline support (built site only; the dev server always serves fresh files).
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
+      const reg = await navigator.serviceWorker.ready;
+      const base = new URL(import.meta.env.BASE_URL, location.href).href;
+      const loaded = performance.getEntriesByType('resource').map((e) => e.name);
+      const extra = ['engine/stockfish-19-lite-single.js', 'engine/stockfish-19-lite-single.wasm', 'voice/pin/manifest.json', 'icon-180.png'].map((f) => base + f);
+      reg.active?.postMessage({ type: 'precache', urls: [location.href.split('#')[0], ...loaded, ...extra] });
+    } catch {
+      /* offline support is a bonus; never block the app */
+    }
+  });
+}
 // Google buttons can appear on any page.
 new MutationObserver(() => bindGoogle(document)).observe(document.body, { childList: true, subtree: true });
