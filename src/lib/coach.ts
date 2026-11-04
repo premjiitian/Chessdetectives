@@ -27,8 +27,8 @@ function isPassed(chess: Chess, sq: Square, color: Side): boolean {
 }
 
 /** Plain-language facts about what a single move does. */
-export function describeMove(fen: string, uci: string, whose: 'you' | 'opponent' = 'you'): { san: string; facts: string[]; move: Move | null } {
-  const d = describeOwnMove(fen, uci);
+export function describeMove(fen: string, uci: string, whose: 'you' | 'opponent' = 'you', pv: string[] = []): { san: string; facts: string[]; move: Move | null } {
+  const d = describeOwnMove(fen, uci, pv);
   if (whose === 'you') return d;
   // Same facts, told from the other side of the board.
   const swap = (t: string) =>
@@ -41,7 +41,7 @@ export function describeMove(fen: string, uci: string, whose: 'you' | 'opponent'
   return { ...d, facts: d.facts.map(swap) };
 }
 
-function describeOwnMove(fen: string, uci: string): { san: string; facts: string[]; move: Move | null } {
+function describeOwnMove(fen: string, uci: string, pv: string[] = []): { san: string; facts: string[]; move: Move | null } {
   const before = new Chess(fen);
   const after = new Chess(fen);
   const mv = play(after, uci);
@@ -108,6 +108,7 @@ function describeOwnMove(fen: string, uci: string): { san: string; facts: string
   if (mv.piece === 'p' && ['d4', 'e4', 'd5', 'e5'].includes(mv.to) && moveNo <= 15) facts.push('It grabs space in the center.');
   if (mv.piece === 'p' && isPassed(after, mv.to, me) && !mv.promotion) facts.push('It pushes a passed pawn — nothing can stop it with a pawn anymore.');
   if (mv.piece === 'k' && !mv.captured && !after.inCheck() && moveNo > 30) facts.push('It activates the king — in endgames the king is a strong fighter.');
+  if (!facts.length) facts.push(...quietMoveFacts(before, after, mv, pv));
   if (!facts.length) {
     const mob = (c: Chess) => c.moves().length;
     const b2 = new Chess(fen);
@@ -158,7 +159,7 @@ export function outcomeOf(fen: string, line: EngineLine, pov: Side): string {
 /** Why the best move works. */
 export function explainBest(fen: string, line: EngineLine): string[] {
   const pov = fen.split(' ')[1] as Side;
-  const d = describeMove(fen, line.uci[0]);
+  const d = describeMove(fen, line.uci[0], 'you', line.uci);
   const out = [`**${d.san}** — ${d.facts.join(' ')}`];
   // For quiet moves, name the follow-up so the idea is concrete.
   const forcing = d.move && (d.move.captured || d.move.san.includes('+') || d.move.promotion);
@@ -265,4 +266,96 @@ export function evalWords(line: Pick<EngineLine, 'cp' | 'mate'>): string {
 export function evalChange(before: Pick<EngineLine, 'cp' | 'mate'>, after: Pick<EngineLine, 'cp' | 'mate'>): string {
   const same = evalWords(before) === evalWords(after);
   return same ? `📊 Evaluation stays at ${evalWords(after)}.` : `📊 Evaluation: ${evalWords(before)} → ${evalWords(after)}.`;
+}
+
+/** Concrete reasons for a quiet move (no capture, check or tactic). */
+function quietMoveFacts(before: Chess, after: Chess, mv: Move, pv: string[]): string[] {
+  const out: string[] = [];
+  const me = mv.color as Side;
+  const them: Side = me === 'w' ? 'b' : 'w';
+  const piece = pieceName(mv.piece);
+  // 1. The plan: what does Stockfish want to do next with this move?
+  if (pv[0] === mv.from + mv.to + (mv.promotion ?? '') && pv.length >= 3) {
+    const c = new Chess(before.fen());
+    const line: Move[] = [];
+    for (const u of pv.slice(0, 5)) {
+      const x = play(c, u);
+      if (!x) break;
+      line.push(x);
+    }
+    const next = line[2];
+    const nextIsBreak =
+      next && next.piece === 'p' && !next.captured && (() => {
+        const c2 = new Chess(before.fen());
+        for (const u of pv.slice(0, 3)) play(c2, u);
+        return c2.moves({ verbose: true }).some((x) => x.from === next.to && x.captured === 'p') || new Chess(flipTurn(c2.fen())).moves({ verbose: true }).some((x) => x.to === next.to && x.piece === 'p' && x.captured === 'p');
+      })();
+    if (next && (next.captured || next.san.includes('+'))) {
+      out.push(`It prepares ${next.san} next${next.captured ? `, going after the ${pieceName(next.captured)}` : ''}.`);
+    } else if (nextIsBreak) {
+      out.push(`It prepares the pawn break ${next!.san}, to open the position for your pieces.`);
+    } else if (materialSwing(before.fen(), pv, me, 6) >= 1) {
+      out.push('It sets up a way to win material a few moves later.');
+    }
+  }
+  // 1b. Support: the move adds a defender to something the opponent is attacking.
+  for (const row of after.board()) {
+    for (const p of row) {
+      if (!p || p.color !== me || p.square === mv.to || p.type === 'k') continue;
+      const attacked = after.attackers(p.square, them).length > 0;
+      const nowDefends = after.attackers(p.square, me).includes(mv.to as Square);
+      if (attacked && nowDefends && before.attackers(p.square, me).length < after.attackers(p.square, me).length) {
+        out.push(`It adds a defender to your ${pieceName(p.type)} on ${p.square}, which is under attack.`);
+        break;
+      }
+    }
+    if (out.length) break;
+  }
+  // 1c. Bishops love the long diagonal.
+  if (mv.piece === 'b' && ['b2', 'g2', 'b7', 'g7', 'a1', 'h1', 'a8', 'h8'].includes(mv.to))
+    out.push('It puts your bishop on the long diagonal, where it aims right through the center.');
+  // 1d. Pawn storm toward the enemy king.
+  if (mv.piece === 'p') {
+    const k = after.board().flat().find((p) => p && p.type === 'k' && p.color === them);
+    if (k && Math.abs(k.square.charCodeAt(0) - mv.to.charCodeAt(0)) <= 2 && Math.abs(+k.square[1] - +mv.to[1]) <= 4)
+      out.push('It starts a pawn storm toward the enemy king, to open lines for an attack.');
+  }
+  // 2. Restriction: the opponent has fewer good squares afterwards.
+  const oppBefore = new Chess(flipTurn(before.fen())).moves().length;
+  const oppAfter = after.moves().length;
+  if (oppBefore - oppAfter >= 4) out.push(`It takes squares away from your opponent: their pieces have ${oppBefore - oppAfter} fewer moves.`);
+  // 3. Activity: the moved piece can do much more from its new square.
+  if (mv.piece !== 'p' && mv.piece !== 'k') {
+    const from = before.moves({ square: mv.from, verbose: true }).length;
+    const to = new Chess(flipTurn(after.fen())).moves({ square: mv.to, verbose: true }).length;
+    if (to - from >= 3) out.push(`Your ${piece} becomes more active: from ${from} to ${to} possible moves.`);
+  }
+  // 4. Rooks love open files.
+  if (mv.piece === 'r') {
+    const file = mv.to[0];
+    const pawns = after.board().flat().filter((p) => p && p.type === 'p' && p.square[0] === file);
+    if (!pawns.length) out.push('It puts your rook on an open file, where it can attack.');
+    else if (!pawns.some((p) => p!.color === me)) out.push('It puts your rook on a half-open file, aiming at their pawn.');
+  }
+  // 5. Pawn moves: breaks, space, escape squares.
+  if (mv.piece === 'p') {
+    const dir = me === 'w' ? 1 : -1;
+    const f = mv.to.charCodeAt(0);
+    const r = +mv.to[1] + dir;
+    const targets = [f - 1, f + 1]
+      .map((x) => String.fromCharCode(x) + r)
+      .filter((sq) => /^[a-h][1-8]$/.test(sq))
+      .filter((sq) => {
+        const p = after.get(sq as Square);
+        return p && p.color === them && p.type === 'p';
+      });
+    if (targets.length) out.push(`It's a pawn break: it challenges the pawn on ${targets[0]} and opens lines for your pieces.`);
+    const king = after.board().flat().find((p) => p && p.type === 'k' && p.color === me);
+    const backRank = me === 'w' ? '1' : '8';
+    if (king && king.square[1] === backRank && Math.abs(king.square.charCodeAt(0) - mv.from.charCodeAt(0)) <= 1 && Math.abs(+mv.from[1] - +backRank) === 1)
+      out.push('It gives your king an escape square, so back-rank tricks won’t work.');
+    const ranksAhead = me === 'w' ? +mv.to[1] - 2 : 7 - +mv.to[1];
+    if (!out.length && ranksAhead >= 2 && 'cdef'.includes(mv.to[0])) out.push('It grabs space, so your pieces have more room behind it.');
+  }
+  return out.slice(0, 2);
 }

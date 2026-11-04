@@ -25,7 +25,8 @@ and the Chess Detectives YouTube course as chapters.
 - Accessibility: 0 axe WCAG 2.1 AA issues on every screen, light **and** dark.
 - No sideways scrolling at 360 px; key buttons reachable next to the board on phones.
 - Safety: data from chess.com is always escaped (`esc()`); `tests/safety.mjs` attacks with hostile names.
-- Coaching is truthful (labels match the position), kind, plain-English, and says *why*.
+- Coaching is truthful (labels match the position), kind, plain-English, and says *why*:
+  ≥ 90 % of best-move explanations concrete (`tests/concrete.test.ts`), reading level ≤ grade 6.
 
 ## Conventions
 - Coach voice: encouraging, never mocking; explain the idea first, then moves.
