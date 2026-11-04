@@ -4,6 +4,7 @@ import './styles.css';
 import { app } from './lib/app';
 import { rankOf } from './lib/training';
 import { esc } from './ui/dom';
+import { accountChip, bindGoogle } from './ui/account';
 import { renderWelcome } from './views/welcome';
 import { renderDashboard } from './views/dashboard';
 import { renderTrain } from './views/train';
@@ -36,6 +37,7 @@ function shell(active: string) {
         ${p ? `<span class="streak" title="Daily streak">🔥 ${p.streak}</span><span class="xp" title="${esc(rank!.title)}">${rank!.icon} ${p.xp} XP</span>` : ''}
         ${app.profile?.avatar ? `<img src="${esc(app.profile.avatar)}" alt="" class="avatar" onerror="this.remove()" />` : ''}
         <span class="uname">${esc(app.profile?.username ?? app.username)}</span>
+        <span class="acct-slot">${accountChip()}</span>
       </div>
     </header>
     <main id="view"></main>
@@ -83,8 +85,16 @@ async function route() {
   }
 }
 
-// Keep the XP/streak chip in the header fresh.
+// Keep the XP/streak chip and the account chip in the header fresh.
+let lastAcct = '';
 app.on(() => {
+  const slot = document.querySelector('.acct-slot');
+  const acct = accountChip();
+  if (slot && acct !== lastAcct) {
+    lastAcct = acct;
+    slot.innerHTML = acct;
+    bindGoogle(slot);
+  }
   const chip = document.querySelector('.topbar .who');
   if (chip && app.progress) {
     const r = rankOf(app.progress.xp);
@@ -96,4 +106,9 @@ app.on(() => {
 });
 
 window.addEventListener('hashchange', route);
-app.restore().then(route);
+app.restore().then(() => {
+  route();
+  app.initCloud();
+});
+// Google buttons can appear on any page.
+new MutationObserver(() => bindGoogle(document)).observe(document.body, { childList: true, subtree: true });

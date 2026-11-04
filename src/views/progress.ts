@@ -2,9 +2,11 @@
 
 import { app } from '../lib/app';
 import { THEMES } from '../lib/themes';
-import { BADGES, RANKS, rankOf, today } from '../lib/training';
+import { BADGES, RANKS, XP_TABLE, rankOf, today } from '../lib/training';
+import { LEVELS } from '../lib/difficulty';
 import type { ThemeId } from '../lib/types';
 import { esc } from '../ui/dom';
+import { accountBox, bindSignOut } from '../ui/account';
 import * as store from '../lib/store';
 
 export function renderProgress(view: HTMLElement) {
@@ -54,6 +56,7 @@ export function renderProgress(view: HTMLElement) {
     <h2>Training calendar</h2>
     <div class="heat">${days.map((d) => `<i title="${d.d}: ${d.n} solved" class="l${d.n === 0 ? 0 : d.n < 3 ? 1 : d.n < 6 ? 2 : 3}"></i>`).join('')}</div>
   </section>
+  ${xpHistory(p)}
   <section class="grid-main">
     <div class="card">
       <h2>Theme mastery</h2>
@@ -77,7 +80,8 @@ export function renderProgress(view: HTMLElement) {
       </div>
       <div class="card settings">
         <h2>Account</h2>
-        <p class="sub">Signed in as <b>${esc(app.username)}</b>. Data is stored only in this browser.</p>
+        <p class="sub">chess.com player: <b>${esc(app.username)}</b>.</p>
+        ${accountBox()}
         <div class="row">
           <button class="btn small" data-act="reanalyze">Re-analyze games</button>
           <button class="btn small ghost" data-act="switch">Switch player</button>
@@ -87,6 +91,7 @@ export function renderProgress(view: HTMLElement) {
     </div>
   </section>`;
 
+  bindSignOut(view, () => renderProgress(view));
   view.querySelector('[data-act=switch]')!.addEventListener('click', async () => {
     await app.logout();
     location.hash = '#/';
@@ -103,4 +108,38 @@ export function renderProgress(view: HTMLElement) {
     await store.clearAll();
     location.hash = '#/';
   });
+}
+
+function xpHistory(p: import('../lib/training').Progress): string {
+  const log = [...(p.log ?? [])].reverse();
+  const byLevel = [1, 2, 3, 4, 5].map((lv) => {
+    const e = log.filter((x) => x.level === lv);
+    return { lv, n: e.length, xp: e.reduce((a, x) => a + x.xp + x.bonus, 0), clean: e.filter((x) => x.result === 'clean').length };
+  });
+  const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
+  const res = { clean: '✅ clean', hinted: '💡 with help', failed: '↻ shown' } as const;
+  return `<section class="card xp-card">
+    <h2>XP by difficulty</h2>
+    <p class="sub">Harder puzzles are worth more. Solve without hints for full XP; with help you get half.</p>
+    <div class="xp-levels">${byLevel
+      .map(
+        (b) => `<div class="xp-level"><span class="stars" aria-label="${b.lv} stars">${stars(b.lv)}</span><b>${esc(LEVELS[b.lv - 1].label)}</b>
+        <span class="sub">${XP_TABLE[b.lv][0]} XP each</span><span>${b.n} solved · ${b.clean} clean</span><strong>${b.xp} XP</strong></div>`,
+      )
+      .join('')}</div>
+    ${
+      log.length
+        ? `<details class="xp-log" ${log.length <= 10 ? 'open' : ''}><summary>XP history (${log.length} puzzle${log.length === 1 ? '' : 's'})</summary>
+          <table><thead><tr><th>When</th><th>Puzzle</th><th>Difficulty</th><th>Result</th><th>XP</th></tr></thead><tbody>${log
+            .slice(0, 50)
+            .map((x) => {
+              const m = app.findMistake(x.id);
+              const g = m ? app.gameOf(m) : undefined;
+              const when = new Date(x.t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+              return `<tr><td>${esc(when)}</td><td>${m ? `<a href="#/train/${encodeURIComponent(x.id)}">Move ${m.moveNumber} vs ${esc(g?.opponent ?? 'opponent')}</a>` : 'Puzzle'}</td><td><span class="stars">${stars(x.level)}</span></td><td>${res[x.result]}${x.replay ? ' · replay' : ''}</td><td><b>+${x.xp}</b>${x.bonus ? ` <span class="bonus">+${x.bonus}🔥</span>` : ''}</td></tr>`;
+            })
+            .join('')}</tbody></table></details>`
+        : '<p class="empty">Solve a puzzle to start your XP history.</p>'
+    }
+  </section>`;
 }

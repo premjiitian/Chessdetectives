@@ -13,7 +13,7 @@
 | **Train** | Puzzles made from *your own* blunders. Find the best move. If you pick a decent alternative, the coach explains why it's reasonable — but pushes you to find the best one. If you pick a bad move, Stockfish shows you the punishment on the board. After the right move, Stockfish replies like a real opponent and the puzzle continues while precision is needed. Progressive hints (idea → theme → piece → move). Each puzzle has a **Difficulty** (★ Beginner → ★★★★★ Expert, with a rough rating) and a **Topic**, both hidden until you tap to reveal them, so they never spoil the search. An “Always show” switch is there if you prefer, and both are revealed automatically once the case is solved. A **“Remember this game?”** card shows when you played it, against whom (with ratings), the result and the time control. Turn on the **🔊 voice coach** to hear the coaching read aloud in a free **natural neural voice** (Piper, runs inside your browser: Hannah or Ryan from the US, Alba or Arthur from the UK; ≈60 MB downloaded once, then works offline) or your device's own voice (moves are spoken naturally, e.g. “Knight takes e5, check”); every message also has a 🔈 replay button. |
 | **Case files** | A gallery of every mistake found, filterable by theme, severity and status. |
 | **Spar** | Play any position from your games (or a full game) against Stockfish at 1350 – 2600 Elo or full strength, with every move graded (Best / Excellent / Good / Inaccuracy / Mistake / Blunder). |
-| **Progress** | XP, detective ranks, daily streak, training calendar, badges and theme mastery. |
+| **Progress** | XP by difficulty (★ 10 XP … ★★★★★ 60 XP, half with hints) with a full XP history, detective ranks, daily streak, training calendar, badges and theme mastery. |
 
 ### Mistake themes it detects
 Left a piece hanging · Missed the opponent's threat · Missed a winning tactic · Missed a checkmate · Walked into checkmate · Missed a fork · Allowed a fork · Missed a pin or skewer · Opening slip · Endgame technique · Planning slip.
@@ -29,6 +29,11 @@ Left a piece hanging · Missed the opponent's threat · Missed a winning tactic 
                                 in 10 min; solved ones                vs Stockfish
                                 in 1, 3, 7, 14, 30 days)
 ```
+
+## Sign in with Google (optional)
+
+Sign-in keeps XP and puzzles on every device. It needs a free Firebase project — follow
+[SETUP-SIGN-IN.md](SETUP-SIGN-IN.md) (about 10 minutes). Until then the app works without accounts.
 
 ## Run it on your computer
 

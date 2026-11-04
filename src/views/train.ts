@@ -10,7 +10,7 @@ import { THEMES } from '../lib/themes';
 import { sanOf } from '../lib/tactics';
 import { difficultyOf } from '../lib/difficulty';
 import { CHAPTERS, chapterByEp, practiceFor, thumb } from '../lib/chapters';
-import { buildSession, shuffle, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
+import { buildSession, shuffle, xpFor, countBlunderSolves, recordResult, BADGES, rankOf } from '../lib/training';
 import type { EngineLine, MistakeRecord, ThemeId } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, confetti, esc, longDate, md, timeAgo, timeControlLabel, toast } from '../ui/dom';
@@ -206,7 +206,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
         <button class="chip-reveal" data-reveal="difficulty">
           <span class="chip-k">Difficulty</span>
           <span class="chip-hidden">👁 Tap to reveal</span>
-          <span class="chip-shown"><span class="stars" aria-hidden="true">${'★'.repeat(diff.level)}${'☆'.repeat(5 - diff.level)}</span> ${esc(diff.label)} · ≈${diff.rating}</span>
+          <span class="chip-shown"><span class="stars" aria-hidden="true">${'★'.repeat(diff.level)}${'☆'.repeat(5 - diff.level)}</span> ${esc(diff.label)} · ≈${diff.rating} · up to ${xpFor(diff.level, 'clean')} XP</span>
         </button>
         <button class="chip-reveal" data-reveal="topic">
           <span class="chip-k">Topic</span>
@@ -459,7 +459,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     board.setInteractive(false);
     const result = revealed || fails >= 2 ? 'failed' : fails === 1 || hintsUsed > 0 ? 'hinted' : 'clean';
     const rankBefore = rankOf(p.xp);
-    const sum = recordResult(p, m, result);
+    const sum = recordResult(p, m, result, Date.now(), difficultyOf(m).level);
     if (countBlunderSolves(p, all) >= 10 && !p.badges.includes('blunder-buster')) {
       p.badges.push('blunder-buster');
       sum.newBadges.push('blunder-buster');
@@ -478,7 +478,8 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     const solvedLine = numberedLine(m.fenBefore, deep?.uci.length ? deep.uci : m.pv, 8);
     say(
       `<div class="stamp ${result}">${result === 'clean' ? 'CASE CLOSED' : result === 'hinted' ? 'CASE SOLVED' : 'CASE REOPENS SOON'}</div>
-       <p class="xp-line">+${sum.xp} XP ${result === 'failed' ? '· this case will come back in a few minutes' : result === 'hinted' ? '· it will return for a review' : '· see you in a few days for a check-up'}</p>
+       <p class="xp-line">+${sum.base} XP <span class="sub">for a ${'★'.repeat(difficultyOf(m).level)} ${esc(difficultyOf(m).label)} puzzle, ${result === 'clean' ? 'solved cleanly' : result === 'hinted' ? 'solved with help' : 'shown the answer'}${sum.replay ? ' (a replay: ¼ XP)' : ''}</span>${sum.bonus ? ` <span class="bonus">+${sum.bonus} 🔥 streak bonus</span>` : ''}</p>
+       <p class="sub">${result === 'failed' ? 'This case comes back in a few minutes.' : result === 'hinted' ? 'It will return for a review.' : 'See you in a few days for a check-up.'}</p>
        <p class="arrows-key"><span class="k red"></span> your game move ${esc(m.played)} &nbsp; <span class="k green"></span> best move ${esc(bestSan)}</p>
        <p>Best line: ${esc(solvedLine)}</p>`,
       'lesson',

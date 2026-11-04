@@ -281,3 +281,57 @@ describe('weekly trend', () => {
     expect(t[0].blundersPerGame).toBe(2);
   });
 });
+
+import { xpFor, XP_TABLE } from '../src/lib/training';
+describe('XP by difficulty', () => {
+  const mk = (id: string) => ({ id, theme: 'missed-fork', severity: 'mistake', endTime: 1 }) as any;
+  it('harder puzzles give more XP; help halves it', () => {
+    expect([1, 2, 3, 4, 5].map((l) => xpFor(l, 'clean'))).toEqual([10, 20, 30, 45, 60]);
+    for (const l of [1, 2, 3, 4, 5]) {
+      expect(XP_TABLE[l][1]).toBe(Math.floor(XP_TABLE[l][0] / 2));
+      expect(xpFor(l, 'failed')).toBeLessThan(xpFor(l, 'hinted'));
+    }
+  });
+  it('records every puzzle in the XP history with its difficulty', () => {
+    const p = emptyProgress('x');
+    const t = Date.UTC(2026, 0, 5, 12);
+    const a = recordResult(p, mk('a'), 'clean', t, 5);
+    expect(a.base).toBe(60);
+    expect(a.bonus).toBe(5); // first day of a streak
+    const b = recordResult(p, mk('b'), 'hinted', t + 1000, 2);
+    expect(b.base).toBe(10);
+    expect(b.bonus).toBe(0); // same day: no second bonus
+    expect(p.log?.map((e) => [e.id, e.level, e.result, e.xp])).toEqual([['a', 5, 'clean', 60], ['b', 2, 'hinted', 10]]);
+    expect(p.xp).toBe(75);
+  });
+  it('replaying a solved case before it is due gives a quarter XP (no farming)', () => {
+    const p = emptyProgress('x');
+    const t = Date.UTC(2026, 0, 5, 12);
+    recordResult(p, mk('a'), 'clean', t, 4);
+    const again = recordResult(p, mk('a'), 'clean', t + 60_000, 4);
+    expect(again.replay).toBe(true);
+    expect(again.base).toBe(11); // 45 / 4, rounded
+  });
+});
+
+import { mergeProgress } from '../src/lib/cloud';
+describe('progress sync between devices', () => {
+  it('merges without losing anything', () => {
+    const a = { ...emptyProgress('kid'), xp: 120, lastDay: '2026-11-03', streak: 2, bestStreak: 4, daily: { '2026-11-03': 3 }, badges: ['first-case'], chapters: [1],
+      cards: { x: { box: 2, due: 5, attempts: 2, solved: 2, lastSeen: 200 } }, log: [{ t: 1, id: 'x', level: 3, result: 'clean', xp: 30, bonus: 5 }] } as any;
+    const b = { ...emptyProgress('kid'), xp: 90, lastDay: '2026-11-04', streak: 3, bestStreak: 3, daily: { '2026-11-04': 2, '2026-11-03': 1 }, badges: ['streak-3'], chapters: [2, 1],
+      cards: { x: { box: 1, due: 1, attempts: 1, solved: 1, lastSeen: 100 }, y: { box: 1, due: 1, attempts: 1, solved: 1, lastSeen: 150 } }, log: [{ t: 2, id: 'y', level: 5, result: 'clean', xp: 60, bonus: 0 }] } as any;
+    const m = mergeProgress(a, b);
+    expect(m.xp).toBe(120);
+    expect(m.lastDay).toBe('2026-11-04');
+    expect(m.streak).toBe(3);
+    expect(m.bestStreak).toBe(4);
+    expect(m.daily).toEqual({ '2026-11-03': 3, '2026-11-04': 2 });
+    expect(m.badges.sort()).toEqual(['first-case', 'streak-3']);
+    expect(m.chapters).toEqual([1, 2]);
+    expect(m.cards.x.lastSeen).toBe(200); // newest version of a case wins
+    expect(Object.keys(m.cards).sort()).toEqual(['x', 'y']);
+    expect(m.log?.map((e) => e.id)).toEqual(['x', 'y']);
+    expect(mergeProgress(m, m).log).toHaveLength(2); // syncing twice changes nothing
+  });
+});
