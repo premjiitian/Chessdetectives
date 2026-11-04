@@ -234,7 +234,7 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .feed { max-height: 56vh; min-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px; }
 .msg { padding: 10px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); animation: pop 0.25s ease-out; }
 .msg p:last-child { margin: 0; }
-.msg.coach::before { content: '🧑‍🏫 Coach'; display: block; font-size: 0.75em; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+.msg.coach::before { content: '🕵️ Professor Pin'; display: block; font-size: 0.75em; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
 .msg.you { align-self: flex-end; background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; padding: 6px 14px; }
 .msg.good { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
 .msg.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, transparent); }

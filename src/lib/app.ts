@@ -213,6 +213,14 @@ class AppState {
     }
   }
 
+  /** Removes a case that a deeper look showed was not a real mistake. */
+  async dismissMistake(id: string) {
+    const a = this.analyses.get(id.split('#')[0]);
+    if (!a) return;
+    a.mistakes = a.mistakes.filter((m) => m.id !== id);
+    await store.set(`analysis:${this.username}`, [...this.analyses.values()]);
+  }
+
   stopAnalysis() {
     this.cancelJob = true;
   }

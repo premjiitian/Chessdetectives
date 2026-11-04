@@ -1,3 +1,4 @@
+import { pinKey, pinManifest, pinUrl } from './pin';
 // The voice coach: reads coaching out loud with the browser's built-in
 // speech engine (free, no account). It picks the most natural-sounding
 // English voice your device has and says chess moves the way people do.
@@ -45,7 +46,7 @@ export function toSpeech(text: string): string {
 
 export interface VoiceSettings {
   enabled: boolean;
-  engine: 'natural' | 'device';
+  engine: 'pin' | 'natural' | 'device';
   naturalVoice: string;
   voiceURI: string;
   rate: number;
@@ -60,7 +61,7 @@ export const NATURAL_VOICES = [
 ] as const;
 
 const KEY = 'voice-settings';
-let settings: VoiceSettings = { enabled: false, engine: 'natural', naturalVoice: NATURAL_VOICES[0].id, voiceURI: '', rate: 1 };
+let settings: VoiceSettings = { enabled: false, engine: 'pin', naturalVoice: NATURAL_VOICES[1].id, voiceURI: '', rate: 1 };
 try {
   settings = { ...settings, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
 } catch {}
@@ -160,7 +161,7 @@ function synth(text: string): Promise<Blob> {
 }
 
 /** Short sentences come back faster, so speech starts sooner. */
-function sentences(text: string): string[] {
+export function sentences(text: string): string[] {
   return text.match(/[^.!?]+[.!?]*/g)?.map((x) => x.trim()).filter(Boolean) ?? [text];
 }
 
@@ -170,12 +171,14 @@ async function pump() {
   const gen = generation;
   while (queue.length && gen === generation) {
     const text = queue.shift()!;
-    if (queue[0]) synth(queue[0]); // prepare the next sentence while this one plays
+    const clips = settings.engine === 'pin' ? await pinManifest() : {};
+    const clip = clips[pinKey(text)];
+    if (queue[0] && !clips[pinKey(queue[0])]) synth(queue[0]); // prepare the next sentence while this one plays
     try {
-      const blob = await synth(text);
+      const src = clip ? pinUrl(clip) : URL.createObjectURL(await synth(text));
       if (gen !== generation) break;
       await new Promise<void>((resolve) => {
-        const a = new Audio(URL.createObjectURL(blob));
+        const a = new Audio(src);
         current = a;
         a.playbackRate = settings.rate;
         a.onended = a.onerror = () => resolve();
@@ -204,7 +207,7 @@ export function speak(text: string, force = false) {
   if (!settings.enabled && !force) return;
   const spoken = toSpeech(text);
   if (!spoken) return;
-  if (settings.engine === 'natural' && !naturalFailed) {
+  if (settings.engine !== 'device' && !naturalFailed) {
     if (naturalReady) {
       queue.push(...sentences(spoken));
       pump();
@@ -238,7 +241,7 @@ export function voiceControl(): HTMLElement {
   const render = () => {
     const list = voices();
     const st = naturalStatus();
-    const natural = settings.engine === 'natural';
+    const natural = settings.engine !== 'device';
     const status = !settings.enabled
       ? ''
       : natural && st.downloading !== null
@@ -256,10 +259,11 @@ export function voiceControl(): HTMLElement {
       <details class="voice-more">
         <summary title="Voice settings">⚙︎</summary>
         <label>Type <select data-v="engine">
-          <option value="natural" ${natural ? 'selected' : ''}>Natural (free, downloads once)</option>
+          <option value="pin" ${settings.engine === 'pin' ? 'selected' : ''}>🕵️ Professor Pin</option>
+          <option value="natural" ${settings.engine === 'natural' ? 'selected' : ''}>Natural voice (free, downloads once)</option>
           <option value="device" ${!natural ? 'selected' : ''}>Device voice (instant)</option>
         </select></label>
-        <label ${natural ? '' : 'hidden'}>Voice <select data-v="natural">${NATURAL_VOICES.map(
+        <label ${natural ? '' : 'hidden'}>${settings.engine === 'pin' ? 'Other lines' : 'Voice'} <select data-v="natural">${NATURAL_VOICES.map(
           (v) => `<option value="${v.id}" ${v.id === settings.naturalVoice ? 'selected' : ''}>${v.label}</option>`,
         ).join('')}</select></label>
         <label ${natural ? 'hidden' : ''}>Voice <select data-v="voice">${list
@@ -274,8 +278,8 @@ export function voiceControl(): HTMLElement {
       updateSettings({ enabled: !settings.enabled });
       render();
       if (settings.enabled) {
-        if (settings.engine === 'natural') prepareNatural().then(() => speak("Hi! I'm your voice coach. I'll talk you through every case."));
-        else speak("Hi! I'm your voice coach. I'll talk you through every case.");
+        if (settings.engine !== 'device') prepareNatural().then(() => speak("Hello, detective! I'm Professor Pin. I'll talk you through every case."));
+        else speak("Hello, detective! I'm Professor Pin. I'll talk you through every case.");
       }
     });
     wrap.querySelector<HTMLSelectElement>('[data-v=engine]')!.addEventListener('change', (e) => {
@@ -283,7 +287,7 @@ export function voiceControl(): HTMLElement {
       updateSettings({ engine: (e.target as HTMLSelectElement).value as VoiceSettings['engine'] });
       render();
       wrap.querySelector('details')?.setAttribute('open', '');
-      if (settings.enabled && settings.engine === 'natural') prepareNatural();
+      if (settings.enabled && settings.engine !== 'device') prepareNatural();
     });
     wrap.querySelector<HTMLSelectElement>('[data-v=natural]')!.addEventListener('change', (e) => {
       stop();
@@ -309,7 +313,7 @@ export function voiceControl(): HTMLElement {
     if (open) wrap.querySelector('details')?.setAttribute('open', '');
   };
   listeners.add(onStatus);
-  if (settings.enabled && settings.engine === 'natural') prepareNatural();
+  if (settings.enabled && settings.engine !== 'device') prepareNatural();
   return wrap;
 }
 

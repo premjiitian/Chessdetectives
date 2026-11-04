@@ -11,7 +11,7 @@ export function renderWelcome(root: HTMLElement) {
       <div class="hero-text">
         <div class="kicker">🔍 Chess Detectives</div>
         <h1>Every mistake is a <span class="hl">clue</span>.</h1>
-        <p class="lead">Connect your chess.com account. We investigate your own games with Stockfish 19, find the mistakes you keep repeating, and turn them into puzzles — with a coach who explains <em>why</em>.</p>
+        <p class="lead">Connect your chess.com account. We investigate your own games with Stockfish 19, find the mistakes you keep repeating, and turn them into puzzles — with <b>Professor Pin</b>, your coach, who explains <em>why</em>.</p>
         <form class="connect" autocomplete="off">
           <label for="uname" class="sr">chess.com username</label>
           <input id="uname" name="uname" placeholder="Your chess.com username" required spellcheck="false" />

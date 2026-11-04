@@ -64,9 +64,9 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
         <span class="btn primary">${session.length ? 'Start training →' : 'Waiting for clues'}</span>
       </a>
       <div class="card coach-note">
-        <div class="coach-face">🧑‍🏫</div>
+        <div class="coach-face">🕵️</div>
         <div>
-          <h3>Coach's note</h3>
+          <h3>Professor Pin's note</h3>
           <p>${s.themes[0] ? esc(THEMES[s.themes[0].id].lesson) : 'Play, then let us investigate. The fastest way to improve is to stop repeating the same mistake — and you can only fix what you can see.'}</p>
         </div>
       </div>

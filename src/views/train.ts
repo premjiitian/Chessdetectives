@@ -232,6 +232,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     hintSteps = hints(m.fenBefore, m.bestUci, info.hint);
     // Small hook used by the automated browser test (tests/e2e.mjs).
     (window as any).__cd = () => ({ played: m.playedUci, best: m.bestUci, color: m.userColor });
+    (window as any).__cdStep = async () => ({ id: m.id, fen: stepFen, solved, busy, interactive: !!board && !solved && !busy, best: (await top)[0]?.uci[0] ?? null });
 
     const when = timeAgo(m.endTime);
     const flash = game
@@ -254,6 +255,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
         solved = true;
         board?.setInteractive(false);
         say('<p>🔎 On a deeper look, your game move was actually fine — the quick scan was too strict. Case dismissed!</p>', 'good');
+        app.dismissMistake(m.id);
         btnHint.hidden = btnSol.hidden = true;
         btnNext.hidden = false;
       }
@@ -498,6 +500,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function speechText(div: HTMLElement): string {
   const c = div.cloneNode(true) as HTMLElement;
   c.querySelectorAll('button, a.btn').forEach((b) => b.remove());
-  c.querySelectorAll('p, h4, div').forEach((e) => e.append(' '));
+  c.querySelectorAll('h4, .stamp').forEach((e) => e.append('. '));
+  c.querySelectorAll('p, div').forEach((e) => e.append(' '));
   return (c.textContent ?? '').replace(/\s+/g, ' ').trim();
 }

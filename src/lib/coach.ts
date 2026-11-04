@@ -113,7 +113,8 @@ function describeOwnMove(fen: string, uci: string): { san: string; facts: string
     const b2 = new Chess(fen);
     const gain = mob(new Chess(flipTurn(after.fen()))) - mob(b2);
     if (gain > 3) facts.push(`It improves your ${pieceName(mv.piece)} and gives your pieces more room to work.`);
-    else facts.push(`It's a quiet move that improves your position.`);
+    else if (!threatsAgainst(after.fen(), true).length) facts.push(`It's a calm, useful move: your ${pieceName(mv.piece)} finds a better square and none of your pieces can be won.`);
+    else facts.push(`It's a quiet move that keeps your position together.`);
   }
   return { san: mv.san, facts, move: mv };
 }
