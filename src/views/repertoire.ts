@@ -32,6 +32,7 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
   let destroyed = false;
   let rep: Repertoire | undefined;
   let offKeys = () => {};
+  let autoStarted = false;
 
   const header = (extra = '') => `
     <section class="dash-head">
@@ -67,6 +68,11 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
         <p class="sub build-status" aria-live="polite"></p>
       </section>`);
     view.querySelector('[data-build]')?.addEventListener('click', build);
+    // First visit: start building straight away, so the repertoire just appears.
+    if (n && !autoStarted) {
+      autoStarted = true;
+      build();
+    }
   }
 
   async function build() {
@@ -255,8 +261,8 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
       await store.del(repKey(color));
       board?.destroy();
       board = null;
+      autoStarted = false; // renderEmpty() starts exactly one build
       renderEmpty();
-      build();
     });
     evalbar.classList.toggle('black', color === 'black');
   }

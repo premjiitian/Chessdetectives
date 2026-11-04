@@ -49,9 +49,8 @@ check('menu has a Repertoire tab', !!(await page.$('nav a[href="#/repertoire"]')
 
 for (const color of ['white', 'black']) {
   await page.goto(`http://localhost:${port}/#/repertoire?color=${color}`);
-  await page.waitForSelector('[data-build]');
   const t = Date.now();
-  await page.click('[data-build]');
+  // It should start building by itself on the first visit (no button press needed).
   const built = await page.waitForSelector('.rep-line', { timeout: 300000 }).then(() => true).catch(() => false);
   check(`${color}: repertoire builds from your games`, built, `${Math.round((Date.now() - t) / 1000)} s`);
   const lines = await page.$$eval('.rep-line', (l) => l.length);
