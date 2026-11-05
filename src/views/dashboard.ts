@@ -197,12 +197,12 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     }
   }
 
-  const signature = () => `${app.timeClasses.join(',')}|${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? 1 : 0}|${period}|${app.progress?.xp}`;
+  const signature = () => `${app.timeClasses.join(',')}|${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? `${app.fetching.done}/${app.fetching.total}` : 0}|${app.lookingBack ? 1 : 0}|${period}|${app.progress?.xp}`;
 
   const statusHtml = (games: number, analyzed: number, pending: number) => {
     if (app.fetching) {
       const f = app.fetching;
-      return `<div class="st-row"><span class="spin"></span><div class="st-text"><b>Collecting evidence from chess.com…</b><span>Month ${f.done} of ${f.total}</span></div><div class="bar wide"><i style="width:${(f.done / Math.max(1, f.total)) * 100}%"></i></div></div>`;
+      return `<div class="st-row"><span class="spin"></span><div class="st-text"><b>${app.lookingBack ? 'No recent games — looking further back on chess.com…' : 'Collecting evidence from chess.com…'}</b><span>Month ${f.done} of ${f.total}</span></div><div class="bar wide"><i style="width:${(f.done / Math.max(1, f.total)) * 100}%"></i></div></div>`;
     }
     if (app.job) {
       const j = app.job;

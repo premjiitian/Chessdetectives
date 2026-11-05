@@ -46,6 +46,8 @@ class AppState {
   fetchedDays = 0;
   /** End time (s) of the player's newest standard game on chess.com, when known; null = none at all. */
   lastPlayed: number | null | undefined = undefined;
+  /** True while downloading older games because nothing recent was found. */
+  lookingBack = false;
   analyses = new Map<string, GameAnalysis>();
   progress: Progress | null = null;
   job: AnalysisJob | null = null;
@@ -169,10 +171,18 @@ class AppState {
         this.lastPlayed = await lastGameTime(this.username);
         const ago = this.lastPlayed ? Math.ceil((Date.now() / 1000 - this.lastPlayed) / 86400) + 1 : Infinity;
         if (ago > window && ago <= 1095) {
-          // Look back over the whole period that contains the last game (e.g. 1 or
-          // 3 years), not just to that day — otherwise only the last game comes in.
-          window = PERIODS.find((p) => p.days >= ago)!.days;
-          games.push(...(await fetchGames(this.username, Math.floor(Date.now() / 1000) - window * 86400)));
+          // Show the period that contains the last game (1 or 3 years), and download
+          // the year of games before it — not just that day (only 1 game), and not
+          // 3 whole years (heavy players have thousands of games a month).
+          const from = Math.max(Math.floor(Date.now() / 1000) - PERIODS.find((p) => p.days >= ago)!.days * 86400, this.lastPlayed! - 365 * 86400);
+          this.lookingBack = true;
+          games.push(
+            ...(await fetchGames(this.username, from, (done, total) => {
+              this.fetching = { done, total };
+              this.emit();
+            })),
+          );
+          window = Math.floor((Date.now() / 1000 - from) / 86400);
         }
       } else this.lastPlayed = games[0].endTime;
       this.games = games;
@@ -183,6 +193,7 @@ class AppState {
       await store.set(`last-sync:${this.username}`, this.lastSyncAt);
     } finally {
       this.fetching = null;
+      this.lookingBack = false;
       this.emit();
     }
   }
