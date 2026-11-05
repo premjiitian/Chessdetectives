@@ -73,6 +73,13 @@ export function renderWelcome(root: HTMLElement) {
       btn.textContent = 'Start investigating →';
     }
   });
+  // A shareable link: …/?u=chesscomname fills in the name and starts straight away
+  // (handy for kids' iPads, and lets the automated iPad Safari check run the real import).
+  const linked = new URLSearchParams(location.search).get('u')?.trim();
+  if (linked && /^[\w-]{2,40}$/.test(linked)) {
+    (form.elements.namedItem('uname') as HTMLInputElement).value = linked;
+    form.requestSubmit();
+  }
   return () => {
     offCloud();
     clearInterval(timer);

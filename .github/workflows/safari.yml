@@ -25,7 +25,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install webkit
+      - name: Install Playwright + WebKit (Safari's engine)
+        run: |
+          npm install --no-save playwright@1.64.1
+          npx playwright install webkit
       - name: Older-Safari check (features iPads on iPadOS 15 lack)
         run: npm run build && node scripts/check-safari.mjs dist
       - name: LIVE site in iPad Safari (WebKit)
@@ -48,6 +51,11 @@ jobs:
           sleep 25; xcrun simctl io "$UDID" screenshot out/mobile-safari/live.png
           xcrun simctl openurl "$UDID" "http://localhost:4173/?v=$GITHUB_RUN_ID"
           sleep 25; xcrun simctl io "$UDID" screenshot out/mobile-safari/branch.png
+          # The real import in real iPad Safari: the ?u= link starts it by itself.
+          for acc in ${ACCOUNTS//,/ }; do
+            xcrun simctl openurl "$UDID" "http://localhost:4173/?u=$acc&v=$GITHUB_RUN_ID-$acc"
+            sleep 75; xcrun simctl io "$UDID" screenshot "out/mobile-safari/import-$acc.png"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

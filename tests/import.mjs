@@ -166,6 +166,27 @@ const zeroOfZero = (t) => /\b0 of 0 games/.test(t);
   await ctx.close();
 }
 
+// 5) The shareable link …/?u=name starts the import by itself
+{
+  const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+  const page = await ctx.newPage();
+  await page.route('https://images.chesscomfiles.com/**', (r) => r.fulfill({ status: 404 }));
+  await page.route('https://api.chess.com/**', (route) => {
+    const url = route.request().url();
+    let file;
+    if (/\/player\/[^/]+$/.test(url)) file = 'profile.json';
+    else if (url.endsWith('/games/archives')) file = 'archives.json';
+    else { const m = url.match(/games\/(\d{4})\/(\d{2})$/); if (m) file = `${m[1]}-${m[2]}.json`; }
+    try { return route.fulfill({ contentType: 'application/json', body: readFileSync(join(FIX, file)) }); } catch { return route.fulfill({ contentType: 'application/json', body: '{"games":[]}' }); }
+  });
+  await page.goto(`http://localhost:${port}/?u=${USER}`);
+  const ok = await page.waitForSelector('.dash-head', { timeout: 30000 }).then(() => true).catch(() => false);
+  await settle(page);
+  const t = ok ? await statusText(page) : '';
+  check('the ?u=name link imports games by itself', ok && /of [1-9]\d* games/.test(t), t.slice(0, 80));
+  await ctx.close();
+}
+
 console.log(`\n${results.filter(Boolean).length}/${results.length} checks passed`);
 await browser.close();
 process.exit(results.every(Boolean) ? 0 : 1);
