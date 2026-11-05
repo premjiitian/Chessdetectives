@@ -3,7 +3,7 @@
 
 import { app } from '../lib/app';
 import { parsePgn } from '../lib/analyzer';
-import { evalChange, evalWords, explainAlternative, explainBest, explainFailure, hints, numberedLine, QUOTES, type HintStep } from '../lib/coach';
+import { evalChange, evalWords, explainAlternative, explainBest, explainFailure, hints, moveBrief, numberedLine, QUOTES, type HintStep } from '../lib/coach';
 import { getEngine } from '../lib/engine';
 import { flip, shortEval, winPercent } from '../lib/evaluation';
 import { THEMES } from '../lib/themes';
@@ -14,7 +14,7 @@ import { buildSession, shuffle, xpFor, countBlunderSolves, recordResult, BADGES,
 import type { EngineLine, MistakeRecord, ThemeId } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, confetti, esc, longDate, md, timeAgo, timeControlLabel, toast } from '../ui/dom';
-import { speak, stop as stopVoice, voiceControl } from '../lib/voice';
+import { listenButton, stop as stopVoice, voiceControl } from '../lib/voice';
 
 const ACCEPT = 3; // a move within 3% win chance of the best counts as best
 const ALTERNATIVE = 10; // within 10% is a "good alternative"
@@ -123,30 +123,24 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
   } catch {}
   let firstTop: Promise<EngineLine[]> = Promise.resolve([]);
 
-  const say = (html: string, kind: 'coach' | 'you' | 'good' | 'bad' | 'alt' | 'lesson' = 'coach') => {
+  /**
+   * Adds a coach message. `brief` is the short spoken summary (what went well
+   * or wrong, their best answer, both plans): only those messages get a
+   * ▶ Listen button, and only they are read when auto-read is on.
+   */
+  const say = (html: string, kind: 'coach' | 'you' | 'good' | 'bad' | 'alt' | 'lesson' = 'coach', brief = '') => {
     const div = document.createElement('div');
     div.className = `msg ${kind}`;
     div.innerHTML = html;
+    const b = brief ? listenButton(brief) : null;
+    if (b) div.append(b);
     feed.append(div);
     feed.scrollTop = feed.scrollHeight;
-    if (kind !== 'you') {
-      const spoken = speechText(div);
-      if (spoken) {
-        speak(spoken);
-        const replay = document.createElement('button');
-        replay.className = 'replay';
-        replay.title = 'Listen';
-        replay.setAttribute('aria-label', 'Listen to this message');
-        replay.textContent = '🔈';
-        replay.addEventListener('click', () => {
-          stopVoice();
-          speak(spoken, true);
-        });
-        div.append(replay);
-      }
-    }
     return div;
   };
+  /** Your plan after a wrong move: the first hint, so the answer stays hidden. */
+  const planHint = () => (hintSteps[0]?.text ?? info().hint).replace(/\*\*/g, '').replace(/^\w/, (x) => x.toLowerCase());
+  const info = () => THEMES[m.theme];
   const paras = (lines: string[]) => lines.map((l) => `<p>${md(l)}</p>`).join('');
 
   const setEval = (line: EngineLine | undefined, sideToMoveIsUser: boolean) => {
@@ -337,18 +331,18 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       fails++;
       reviewing = true; // from now on, a tap on the board skips ahead
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
-      say(`<p><b>That's the move you played in the game!</b></p>${evalLine}<p>Why? Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
+      say(`<p><b>That's the move you played in the game!</b></p>${evalLine}<p>Why? Let's see what your opponent could do:</p>${paras(explainFailure(fen, uci, r))}`, 'bad', line ? `That's your game move. ${moveBrief(fen, line, 'wrong', planHint())}` : '');
       await punish(r, my);
     } else if (gap <= ALTERNATIVE || (myWin >= 55 && gap <= 15)) {
       reviewing = true;
-      say(`${paras(explainAlternative(fen, uci, myWin, bestWin))}${line ? `<p class="eval-line">📊 Your move: ${esc(evalWords(line))}. The best move: ${esc(evalWords(best))}.</p>` : ''}`, 'alt');
+      say(`${paras(explainAlternative(fen, uci, myWin, bestWin))}${line ? `<p class="eval-line">📊 Your move: ${esc(evalWords(line))}. The best move: ${esc(evalWords(best))}.</p>` : ''}`, 'alt', line ? moveBrief(fen, line, 'okay') : '');
       say('<p>↺ Good thinking — now find the even stronger move. The board resets in a moment (or tap it).</p>', 'coach');
       await review(my);
     } else {
       fails++;
       reviewing = true;
       const r = reply ?? (line ? { ...flip(line), uci: line.uci.slice(1) } : undefined);
-      say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${evalLine}<p>Why?</p>${paras(explainFailure(fen, uci, r))}`, 'bad');
+      say(`<p><b>Not quite.</b> Winning chances would drop to about ${Math.round(myWin)}%.</p>${evalLine}<p>Why?</p>${paras(explainFailure(fen, uci, r))}`, 'bad', line ? `Not quite. ${moveBrief(fen, line, 'wrong', planHint())}` : '');
       await punish(r, my);
     }
   }
@@ -389,7 +383,8 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     if (!board) return;
     steps++;
     const quality = line.uci[0] === (await top)[0]?.uci[0] ? 'the best move' : 'just as strong as the engine move';
-    say(`<p><b>${['Excellent!', 'Brilliant detective work!', 'Spot on!', 'Yes — that\'s it!'][steps % 4]}</b> That's ${quality}.</p>${paras(explainBest(fen, line))}<p class="eval-line">${esc(`📊 Evaluation: ${evalWords(line)}.`)}</p>`, 'good');
+    const praise = ['Excellent!', 'Brilliant detective work!', 'Spot on!', 'Yes — that\'s it!'][steps % 4];
+    say(`<p><b>${praise}</b> That's ${quality}.</p>${paras(explainBest(fen, line))}<p class="eval-line">${esc(`📊 Evaluation: ${evalWords(line)}.`)}</p>`, 'good', `${praise} ${moveBrief(fen, line, 'good')}`);
     board.shapes([board.arrow(line.uci[0].slice(0, 2), line.uci[0].slice(2, 4), 'green')]);
 
     const after = board.chess;
@@ -448,7 +443,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     resetStep();
     const lines = await top;
     if (!lines[0] || !board) return;
-    say(`<p>Here is the solution. Watch the board 👀</p>${paras(explainBest(stepFen, lines[0]))}`, 'alt');
+    say(`<p>Here is the solution. Watch the board 👀</p>${paras(explainBest(stepFen, lines[0]))}`, 'alt', moveBrief(stepFen, lines[0], 'good'));
     const mv = lines[0].uci[0];
     board.shapes([board.arrow(mv.slice(0, 2), mv.slice(2, 4), 'blue')]);
     await sleep(900);
@@ -488,7 +483,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
        <p>Best line: ${esc(solvedLine)}</p>`,
       'lesson',
     );
-    const lesson = say(`<h4>${info.icon} Key lesson: ${esc(info.title)}</h4><p>${esc(info.lesson)}</p>`, 'lesson');
+    const lesson = say(`<h4>${info.icon} Key lesson: ${esc(info.title)}</h4><p>${esc(info.lesson)}</p>`, 'lesson', `Key lesson: ${info.title}. ${info.lesson}`);
     const ch = CHAPTERS.find((c) => c.themes[0] === m.theme) ?? CHAPTERS.find((c) => c.themes.length < 6 && c.themes.includes(m.theme));
     if (ch) {
       const a = document.createElement('a');
@@ -545,12 +540,3 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** The words of a message, without buttons or decoration. */
-export function speechText(div: HTMLElement): string {
-  const c = div.cloneNode(true) as HTMLElement;
-  c.querySelectorAll('button, a.btn').forEach((b) => b.remove());
-  c.querySelectorAll('h4, .stamp').forEach((e) => e.append('. '));
-  c.querySelectorAll('p, div').forEach((e) => e.append(' '));
-  return (c.textContent ?? '').replace(/\s+/g, ' ').trim();
-}

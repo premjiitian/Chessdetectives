@@ -11,7 +11,30 @@ import { winPercent } from './evaluation';
 import { parsePgn } from './analyzer';
 import type { Color, EngineLine, GameRecord } from './types';
 
-export type RepKind = 'yours' | 'upgrade' | 'engine' | 'reply' | 'engine-reply';
+export type RepKind = 'yours' | 'upgrade' | 'engine' | 'reply' | 'engine-reply' | 'saved' | 'saved-reply';
+
+/** Kinds where the opponent moves (the app plays them in practice). */
+export const isReply = (k: RepKind) => k === 'reply' || k === 'engine-reply' || k === 'saved-reply';
+
+/** Turns a line you saved (UCI moves from the start) into repertoire moves. */
+export function lineFromMoves(color: Color, moves: string[], name = ''): RepMove[] {
+  const c = new Chess();
+  const out: RepMove[] = [];
+  const mineFirst = color === 'white';
+  for (const [i, uci] of moves.entries()) {
+    let mv;
+    try {
+      mv = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    } catch {
+      break; // stop at the first illegal move
+    }
+    const mine = (i % 2 === 0) === mineFirst;
+    out.push({ uci, san: mv.san, fen: c.fen(), kind: mine ? 'saved' : 'saved-reply', ply: i + 1, count: 0, score: null, children: [] });
+  }
+  out.forEach((m, i) => (m.children = out[i + 1] ? [out[i + 1]] : []));
+  if (out.length && name) out[out.length - 1].opening = name;
+  return out;
+}
 
 export interface RepMove {
   uci: string;

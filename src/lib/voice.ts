@@ -53,7 +53,10 @@ export function toSpeech(text: string): string {
 }
 
 export interface VoiceSettings {
-  enabled: boolean;
+  /** Old setting (read everything aloud); replaced by `auto`. */
+  enabled?: boolean;
+  /** false (default): quiet — tap ▶ Listen to hear a short summary. true: summaries are read automatically. */
+  auto: boolean;
   engine: 'pin' | 'natural' | 'device';
   naturalVoice: string;
   voiceURI: string;
@@ -69,7 +72,7 @@ export const NATURAL_VOICES = [
 ] as const;
 
 const KEY = 'voice-settings';
-let settings: VoiceSettings = { enabled: false, engine: 'pin', naturalVoice: NATURAL_VOICES[1].id, voiceURI: '', rate: 1 };
+let settings: VoiceSettings = { auto: false, engine: 'pin', naturalVoice: NATURAL_VOICES[1].id, voiceURI: '', rate: 1 };
 try {
   settings = { ...settings, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
 } catch {}
@@ -85,7 +88,7 @@ export function updateSettings(s: Partial<VoiceSettings>) {
   try {
     localStorage.setItem(KEY, JSON.stringify(settings));
   } catch {}
-  if (!settings.enabled) stop();
+  if (!settings.auto) stop();
 }
 
 /** English voices, best-sounding first. */
@@ -169,7 +172,7 @@ export function unlockAudio() {
 if (typeof window !== 'undefined') {
   // Any first tap anywhere also unlocks audio, so the coach can speak later.
   const once = () => {
-    if (settings.enabled) unlockAudio();
+    if (settings.auto) unlockAudio();
     window.removeEventListener('pointerdown', once);
   };
   window.addEventListener('pointerdown', once);
@@ -253,9 +256,13 @@ function deviceSpeakAsync(text: string): Promise<void> {
 }
 
 
-/** Speak now (queued after anything already being said). */
+/**
+ * Speak (queued after anything already being said). Without `force` this only
+ * talks when the player chose "read aloud automatically"; a tap on ▶ Listen
+ * always forces it.
+ */
 export function speak(text: string, force = false) {
-  if (!settings.enabled && !force) return;
+  if (!settings.auto && !force) return;
   const spoken = toSpeech(text);
   if (!spoken) return;
   // Get the natural voice ready in the background; until then the device voice
@@ -288,18 +295,16 @@ export function voiceControl(): HTMLElement {
     const list = voices();
     const st = naturalStatus();
     const natural = settings.engine !== 'device';
-    const status = !settings.enabled
-      ? ''
+    const status = !settings.auto
+      ? '<span class="sub v-status">Quiet. Tap ▶ Listen for a short summary.</span>'
       : natural && st.downloading !== null
         ? `<span class="sub v-status">⬇ Preparing natural voice… ${st.downloading}% (one time, ≈60 MB)</span>`
         : natural && st.failed
           ? '<span class="sub v-status">Natural voice unavailable here — using your device voice.</span>'
-          : natural && st.ready
-            ? '<span class="sub v-status">✓ Natural voice ready</span>'
-            : '';
+          : '<span class="sub v-status">Reads a short summary after each move.</span>';
     wrap.innerHTML = `
-      <button class="btn small ${settings.enabled ? 'primary' : ''}" data-v="toggle" aria-pressed="${settings.enabled}">
-        ${settings.enabled ? '🔊 Voice coach on' : '🔈 Voice coach off'}
+      <button class="btn small ${settings.auto ? 'primary' : ''}" data-v="toggle" aria-pressed="${settings.auto}">
+        ${settings.auto ? '🔊 Auto-read on' : '🔇 Auto-read off'}
       </button>
       ${status}
       <details class="voice-more">
@@ -322,11 +327,11 @@ export function voiceControl(): HTMLElement {
       </details>`;
     wrap.querySelector('[data-v=toggle]')!.addEventListener('click', () => {
       unlockAudio();
-      updateSettings({ enabled: !settings.enabled });
+      updateSettings({ auto: !settings.auto });
       render();
-      if (settings.enabled) {
-        if (settings.engine !== 'device') prepareNatural().then(() => speak("Hello, detective! I'm Professor Pin. I'll talk you through every case."));
-        else speak("Hello, detective! I'm Professor Pin. I'll talk you through every case.");
+      if (settings.auto) {
+        if (settings.engine !== 'device') prepareNatural().then(() => speak("Hello, detective! I'm Professor Pin."));
+        else speak("Hello, detective! I'm Professor Pin.");
       }
     });
     wrap.querySelector<HTMLSelectElement>('[data-v=engine]')!.addEventListener('change', (e) => {
@@ -334,14 +339,14 @@ export function voiceControl(): HTMLElement {
       updateSettings({ engine: (e.target as HTMLSelectElement).value as VoiceSettings['engine'] });
       render();
       wrap.querySelector('details')?.setAttribute('open', '');
-      if (settings.enabled && settings.engine !== 'device') prepareNatural();
+      if (settings.auto && settings.engine !== 'device') prepareNatural();
     });
     wrap.querySelector<HTMLSelectElement>('[data-v=natural]')!.addEventListener('change', (e) => {
       stop();
       updateSettings({ naturalVoice: (e.target as HTMLSelectElement).value });
       naturalReady = false;
       naturalFailed = false;
-      if (settings.enabled) prepareNatural();
+      if (settings.auto) prepareNatural();
     });
     wrap.querySelector<HTMLSelectElement>('[data-v=voice]')!.addEventListener('change', (e) => updateSettings({ voiceURI: (e.target as HTMLSelectElement).value }));
     wrap.querySelector<HTMLSelectElement>('[data-v=rate]')!.addEventListener('change', (e) => updateSettings({ rate: Number((e.target as HTMLSelectElement).value) }));
@@ -361,8 +366,30 @@ export function voiceControl(): HTMLElement {
     if (open) wrap.querySelector('details')?.setAttribute('open', '');
   };
   listeners.add(onStatus);
-  if (settings.enabled && settings.engine !== 'device') prepareNatural();
+  if (settings.auto && settings.engine !== 'device') prepareNatural();
   return wrap;
+}
+
+/**
+ * A small ▶ Listen button that reads `text` (a short summary) on tap, and
+ * reads it straight away when auto-read is on. A new move calls stop().
+ */
+export function listenButton(text: string): HTMLButtonElement | null {
+  if (!toSpeech(text)) return null;
+  const b = document.createElement('button');
+  b.className = 'listen';
+  b.type = 'button';
+  b.setAttribute('aria-label', 'Listen to a short summary');
+  b.title = 'Listen to a short summary';
+  b.textContent = '▶ Listen';
+  b.dataset.say = text;
+  b.addEventListener('click', () => {
+    unlockAudio();
+    stop();
+    speak(text, true);
+  });
+  speak(text);
+  return b;
 }
 
 // Hook for the automated browser test (tests/e2e.mjs).

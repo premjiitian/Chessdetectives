@@ -144,12 +144,13 @@ export function mergeProgress(a: Progress, b: Progress | undefined): Progress {
     badges: [...new Set([...(a.badges ?? []), ...(b.badges ?? [])])],
     chapters: [...new Set([...(a.chapters ?? []), ...(b.chapters ?? [])])].sort((x, y) => x - y),
     log,
-    notes: mergeNotes(a.notes, b.notes),
+    notes: newestWins(a.notes, b.notes),
+    myLines: newestWins(a.myLines, b.myLines),
   };
 }
 
-/** Notes: for each move, the most recently edited version wins (also deletions). */
-function mergeNotes(a?: Progress['notes'], b?: Progress['notes']): Progress['notes'] {
+/** Notes and saved lines: for each key, the most recently edited version wins (also deletions). */
+function newestWins<T extends { t: number }>(a?: Record<string, T>, b?: Record<string, T>): Record<string, T> | undefined {
   if (!a && !b) return undefined;
   const out = { ...(b ?? {}) };
   for (const [k, n] of Object.entries(a ?? {})) if (!out[k] || n.t >= out[k].t) out[k] = n;

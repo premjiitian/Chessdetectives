@@ -4,12 +4,11 @@
 import { getEngine } from '../lib/engine';
 import { botMove } from '../lib/bot';
 import { flip, shortEval, winPercent } from '../lib/evaluation';
-import { describeMove } from '../lib/coach';
+import { describeMove, moveBrief } from '../lib/coach';
 import type { EngineLine } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, esc, md } from '../ui/dom';
-import { speak, stop as stopVoice, voiceControl } from '../lib/voice';
-import { speechText } from './train';
+import { listenButton, stop as stopVoice, voiceControl } from '../lib/voice';
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const LEVELS = [
@@ -80,13 +79,15 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
   let lastEval: EngineLine | undefined; // from side to move
   const sans: string[] = [];
 
-  const say = (html: string, cls = 'coach') => {
+  /** Only messages with a short spoken summary get ▶ Listen (and auto-read). */
+  const say = (html: string, cls = 'coach', brief = '') => {
     const d = document.createElement('div');
     d.className = `msg ${cls}`;
     d.innerHTML = html;
+    const b = brief ? listenButton(brief) : null;
+    if (b) d.append(b);
     feed.append(d);
     feed.scrollTop = feed.scrollHeight;
-    speak(speechText(d));
   };
 
   const board = new Board($(view, '#board'), { fen: startFen, orientation: color, onMove: userMove });
@@ -155,14 +156,19 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
       const g = GRADES.find((x) => loss <= x.max)!;
       const phrase = g.say[sans.length % g.say.length];
       let extra = '';
+      let better = '';
       if (g.max > 10 && before.uci[0]) {
         const d = describeMove(fenBefore, before.uci[0]);
+        better = `next time, play ${d.san} here.`;
         extra = ` Better was <b>${esc(d.san)}</b> — ${md(d.facts[0] ?? '')}`;
       } else if (g.max <= 5) {
         const d = describeMove(fenBefore, uci);
         extra = d.facts[0] && !d.facts[0].startsWith("It's a quiet") ? ` ${md(d.facts[0])}` : '';
       }
-      say(`<p><span class="grade ${g.cls}">${g.name}</span> <b>${esc(san)}</b>: ${phrase}${extra}</p>`, g.max > 10 ? 'bad' : 'good');
+      // Your move + Stockfish's best answer and the plans that follow (your point of view).
+      const mine = { ...flip(after), uci: [uci, ...after.uci] };
+      const brief = moveBrief(fenBefore, mine, g.max <= 5 ? 'good' : g.max <= 10 ? 'okay' : 'wrong', better || undefined);
+      say(`<p><span class="grade ${g.cls}">${g.name}</span> <b>${esc(san)}</b>: ${phrase}${extra}</p>`, g.max > 10 ? 'bad' : 'good', brief);
       setEval(after, false);
     }
     if (gameOver()) {

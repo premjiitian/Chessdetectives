@@ -27,7 +27,38 @@ export interface Progress {
   chapters?: number[]; // episodes watched
   log?: XpEntry[]; // every puzzle you finished, newest last
   notes?: Record<string, Note>; // your own comments (repertoire moves), saved in your profile
+  myLines?: Record<string, MyLine>; // extra repertoire lines you added yourself
 }
+
+/** A repertoire line you saved yourself (moves from the starting position). */
+export interface MyLine {
+  color: 'white' | 'black';
+  name: string;
+  moves: string[]; // UCI, both sides, from the start
+  t: number; // last edited (ms)
+  deleted?: boolean; // kept as a marker so other devices learn about it
+}
+
+/** The same moves for the same colour are the same line (saving again renames it). */
+export const myLineId = (color: string, moves: string[]) => `${color}:${moves.join(' ')}`;
+
+export function saveMyLine(p: Progress, color: MyLine['color'], name: string, moves: string[], now = Date.now()): string {
+  const id = myLineId(color, moves);
+  p.myLines ??= {};
+  p.myLines[id] = { color, name: name.trim().slice(0, 80) || 'My line', moves: moves.slice(0, 40), t: now };
+  return id;
+}
+
+export function deleteMyLine(p: Progress, id: string, now = Date.now()) {
+  const l = p.myLines?.[id];
+  if (l) p.myLines![id] = { ...l, deleted: true, t: now };
+}
+
+/** Your saved lines for one colour, oldest first. */
+export const myLinesFor = (p: Progress | null | undefined, color: string) =>
+  Object.entries(p?.myLines ?? {})
+    .filter(([, l]) => l.color === color && !l.deleted && l.moves.length)
+    .sort((a, b) => a[1].t - b[1].t);
 
 export interface Note {
   text: string;

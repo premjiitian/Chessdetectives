@@ -369,6 +369,14 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .my-note label { font-weight: 700; }
 .my-note textarea { width: 100%; font: inherit; font-size: max(16px, 1em); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); resize: vertical; }
 .my-note textarea:focus { outline: 3px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
+.mv.saved { border-color: var(--gold); border-width: 2px; }
+.rk.saved { background: var(--alt-soft); color: var(--alt-ink); }
+.rep-line.mine { border-left: 4px solid var(--gold); }
+.rep-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.rep-edit h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.rep-edit .edit-moves { font-size: 1.05rem; min-height: 1.4em; }
+.edit-name { display: grid; gap: 4px; font-weight: 600; margin: 8px 0; }
+.edit-name input { font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .mv.has-note::after { content: ' 📝'; font-size: 0.85em; }
 .your-note { background: var(--alt-soft); padding: 6px 10px; border-radius: 8px; }
 @media (pointer: coarse) { .mv { min-height: 44px; padding: 6px 10px; } }
@@ -450,7 +458,7 @@ button, a, select, summary { -webkit-tap-highlight-color: transparent; }
 @media (pointer: coarse) {
   /* Finger-sized targets (Apple recommends 44pt). */
   .btn, .btn.small, select, .sp, .chip-reveal, .tabs button, .voice-more summary, .topbar nav a { min-height: 44px; }
-  .msg .replay { padding: 10px; top: 0; right: 0; opacity: 0.7; }
+  .listen { min-height: 44px; }
   .always { min-height: 44px; }
   .always input { width: 22px; height: 22px; }
 }
@@ -498,8 +506,9 @@ button, a, select, summary { -webkit-tap-highlight-color: transparent; }
 .voice-more label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.85em; }
 .voice-more select { max-width: 200px; }
 .msg { position: relative; }
-.msg .replay { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; cursor: pointer; font-size: 0.95rem; opacity: 0.45; padding: 2px; }
-.msg .replay:hover, .msg .replay:focus-visible { opacity: 1; }
+.listen { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--accent-ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.listen:hover, .listen:focus-visible { background: var(--accent-soft); }
+.coach-view > .listen { margin: 0 0 8px; }
 .msg.coach::before, .msg h4, .msg > p:first-child { padding-right: 18px; }
 
 /* hidden-until-tapped puzzle tags */
