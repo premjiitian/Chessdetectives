@@ -15,6 +15,7 @@ const steps = [
   { name: 'Type check', cmd: 'npx tsc --noEmit' },
   { name: 'Unit tests', cmd: 'npx vitest run', metric: /Tests\s+(\d+ passed[^\n]*)/ },
   { name: 'Build', cmd: 'npm run build' },
+  { name: 'Runs on older iPad Safari (15+)', cmd: 'node scripts/check-safari.mjs dist', metric: /(\d+ files checked|\d+ problem\(s\))/ },
   { name: 'Robot student (solve every case)', cmd: 'node tests/audit.mjs', browser: true, metric: /"solved": (\d+)[\s\S]*"dismissed": (\d+)[\s\S]*"stuck": (\d+)/, fmt: (m) => `${m[1]} solved · ${m[2]} dismissed · ${m[3]} stuck`, fail: (out) => /"stuck": [1-9]|ERRORS:/.test(out) || /FLAG (timeout|never-interactive|no-best|not-clean)/.test(out) },
   { name: 'Edge cases', cmd: 'node tests/edge.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Chapters journey', cmd: 'node tests/chapters.mjs', browser: true, metric: /(\d+\/\d+) checks passed/, fail: (out) => /❌/.test(out) },

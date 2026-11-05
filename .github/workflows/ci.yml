@@ -23,3 +23,5 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Runs on older iPad Safari (no features iPadOS 15 lacks)
+        run: node scripts/check-safari.mjs dist

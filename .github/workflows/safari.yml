@@ -1,0 +1,55 @@
+# iPad Safari: the website in WebKit (Safari's engine) on iPad sizes, with real
+# chess.com accounts — both the LIVE site and this branch's build — plus a
+# screenshot from real Mobile Safari on an iPad simulator.
+name: iPad Safari
+
+on:
+  push:
+    paths: ['src/**', 'public/**', 'index.html', 'vite.config.ts', 'package*.json', 'tests/safari.mjs', '.github/workflows/safari.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: safari-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webkit:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ACCOUNTS: erik,danielnaroditsky
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install webkit
+      - name: Older-Safari check (features iPads on iPadOS 15 lack)
+        run: npm run build && node scripts/check-safari.mjs dist
+      - name: LIVE site in iPad Safari (WebKit)
+        continue-on-error: true
+        run: SITE=https://premjiitian.github.io/Chessdetectives/ CHESS_USER=$ACCOUNTS OUT=out/live node tests/safari.mjs
+      - name: This branch in iPad Safari (WebKit)
+        run: |
+          npx vite preview --port 4173 --strictPort &
+          sleep 4
+          SITE=http://localhost:4173/ CHESS_USER=$ACCOUNTS OUT=out/branch node tests/safari.mjs
+      - name: Real Mobile Safari on an iPad simulator (live site + this branch)
+        if: always()
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys;d=json.load(sys.stdin)['devices'];print([x['udid'] for r,v in d.items() if 'iOS' in r for x in v if x['name'].startswith('iPad')][-1])")
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+          mkdir -p out/mobile-safari
+          xcrun simctl io "$UDID" screenshot out/mobile-safari/warmup.png >/dev/null 2>&1 || true
+          xcrun simctl openurl "$UDID" "https://premjiitian.github.io/Chessdetectives/?v=$GITHUB_RUN_ID"
+          sleep 25; xcrun simctl io "$UDID" screenshot out/mobile-safari/live.png
+          xcrun simctl openurl "$UDID" "http://localhost:4173/?v=$GITHUB_RUN_ID"
+          sleep 25; xcrun simctl io "$UDID" screenshot out/mobile-safari/branch.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-safari
+          path: out/

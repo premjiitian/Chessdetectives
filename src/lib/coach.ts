@@ -482,7 +482,7 @@ export type BriefVerdict = 'good' | 'okay' | 'wrong';
 
 /** First fact as one short sentence ("It wins the queen."), or '' when it says nothing concrete. */
 function gist(facts: string[]): string {
-  const f = (facts[0] ?? '').replace(/\*\*/g, '').split(/(?<=[.!])\s/)[0].replace(/\s+—.*$/, '.').trim();
+  const f = (facts[0] ?? '').replace(/\*\*/g, '').match(/^[^.!]*[.!]?/)![0] /* first sentence; no regex look-behind (older iPad Safari can't read it) */.replace(/\s+—.*$/, '.').trim();
   if (/calm, useful move|quiet move that keeps|improves (your|their) \w+ and gives/.test(f)) return '';
   return f;
 }
