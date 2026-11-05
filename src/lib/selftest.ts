@@ -42,7 +42,7 @@ export async function runSelfTest() {
   const shot = async (name: string) => {
     await sleep(1500);
     console.log(`CD-SHOT ${name}`);
-    await sleep(3000); // time for the screenshot
+    await sleep(5000); // time for the screenshot (the CI script takes it now)
   };
   const user = import.meta.env.VITE_SELFTEST_USER || 'erik';
   await sleep(1500);

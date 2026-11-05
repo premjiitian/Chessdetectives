@@ -118,7 +118,7 @@ app.restore().then(() => {
 });
 routeExternalLinks();
 if (isNativeApp()) document.documentElement.classList.add('native-app');
-if (import.meta.env.VITE_SELFTEST) import('./lib/selftest').then((m) => m.runSelfTest());
+if (import.meta.env.VITE_SELFTEST && !location.search.includes('noselftest')) import('./lib/selftest').then((m) => m.runSelfTest());
 // Offline support (built site only; the dev server always serves fresh files).
 // The iOS app already has every file on the device, so it needs no helper.
 if ('serviceWorker' in navigator && import.meta.env.PROD && !isNativeApp()) {

@@ -25,6 +25,9 @@ echo "== $NAME ($UDID)"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b
 xcrun simctl install "$UDID" "$APP"
+# The first screenshot after boot takes ~30 s; take a throw-away one now so
+# the real ones happen while the app still shows the screen it asked for.
+xcrun simctl io "$UDID" screenshot "$OUT/.warmup.png" >/dev/null 2>&1; rm -f "$OUT/.warmup.png"
 
 LOG="$OUT/console.log"
 : > "$LOG"
@@ -53,6 +56,9 @@ while [ $SECONDS -lt $deadline ]; do
   result=$(grep -o 'CD-SELFTEST [A-Z]* [0-9/]*' "$LOG" | tail -1)
   [ -n "$result" ] && break
 done
+# Print any check lines that arrived together with the final result.
+total=$(wc -l < "$LOG" | tr -d ' ')
+[ "$total" -gt "$seen" ] && sed -n "$((seen + 1)),${total}p" "$LOG" | grep -o 'CD-CHECK.*' | sed 's/^CD-CHECK //'
 kill "$LAUNCH_PID" 2>/dev/null || true
 xcrun simctl shutdown "$UDID" 2>/dev/null || true
 

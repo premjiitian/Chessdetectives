@@ -30,7 +30,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const log = [];
 page.on('console', (m) => log.push(m.text()));
-await page.addInitScript((user) => {
+await ctx.addInitScript((user) => {
   // Pretend to be the iOS app: the Capacitor bridge exists.
   window.webkit = { messageHandlers: { bridge: { postMessage() {} } } };
   window.__opened = [];
@@ -50,6 +50,17 @@ await page.route('https://api.chess.com/**', (route) => {
   if (file && existsSync(join(FIX, file))) return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: readFileSync(join(FIX, file)) });
   return route.fulfill({ status: 200, contentType: 'application/json', body: '{"games":[]}' });
 });
+
+// Before anything else: the welcome screen on a phone with a notch (47 px).
+{
+  const p2 = await ctx.newPage();
+  await p2.goto(`http://localhost:${port}/?noselftest`);
+  await p2.waitForSelector('.hero');
+  await p2.evaluate(() => document.documentElement.style.setProperty('--safe-top', '47px'));
+  const top = await p2.$eval('.hero', (e) => e.getBoundingClientRect().top);
+  check('welcome screen starts below the notch (47 px safe area)', top >= 47, `content at ${Math.round(top)}px`);
+  await p2.close();
+}
 
 // The self-test drives the whole journey by itself (as on the simulator).
 await page.goto(`http://localhost:${port}/`);
