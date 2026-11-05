@@ -26,6 +26,7 @@ const steps = [
   { name: 'Offline (no internet)', cmd: 'node tests/offline.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Professor Pin voice', cmd: 'node tests/voice.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Repertoire (build, browse, practise)', cmd: 'node tests/repertoire.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
+  { name: 'Import from chess.com (rare, filtered, empty, active)', cmd: 'node tests/import.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'iOS app mode (self-test)', cmd: 'npm run build:selftest --silent && node tests/app-mode.mjs', browser: true, metric: /(\d+\/\d+) checks passed/ },
   { name: 'Walkthrough + screenshots', cmd: 'node tests/e2e.mjs', browser: true, metric: /(No console errors\.)/ },
 ];

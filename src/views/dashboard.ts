@@ -33,7 +33,7 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     <section class="dash-head">
       <div>
         <h1>${(app.progress?.xp ?? 0) > 0 || app.analyses.size > 25 ? 'Welcome back' : 'Welcome'}, ${esc(name)} 👋</h1>
-        <p class="headline">${esc(app.job && s.analyzed < 5 ? `Professor Pin is studying your games (${s.analyzed} of ${s.games} done) — your patterns appear here as clues come in.` : headline(s))}</p>
+        <p class="headline">${esc(app.job && s.analyzed < 5 ? `Professor Pin is studying your games (${s.analyzed} of ${s.games} done) — your patterns appear here as clues come in.` : !games.length ? 'First, let’s find your games — see the box below.' : headline(s))}</p>
       </div>
       <div class="tabs" role="tablist">
         ${PERIODS.map((p) => `<button role="tab" data-period="${p.id}" class="${p.id === period ? 'on' : ''}">${p.label}</button>`).join('')}
@@ -75,7 +75,7 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
           <h2>Today's case files</h2>
           <p>${session.length ? `${session.length} puzzles from your own games are waiting${due ? ` · ${due} review${due > 1 ? 's' : ''} due` : ''}.` : 'Analyze a few games to unlock your personal puzzles.'}</p>
         </div>
-        ${session.length ? '<span class="btn primary">Start training →</span>' : `<span class="sub">${app.job ? '⏳ Puzzles appear as games are analyzed' : 'Press “Analyze” above to find your puzzles'}</span>`}
+        ${session.length ? '<span class="btn primary">Start training →</span>' : `<span class="sub">${app.job ? '⏳ Puzzles appear as games are analyzed' : games.length ? 'Press “Analyze” above to find your puzzles' : 'Your puzzles appear once your games are in (see above)'}</span>`}
       </a>
       ${(() => {
         const rec = recommendChapter(app.mistakes(d), app.progress?.chapters ?? []);
@@ -156,20 +156,7 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       </div>
     </section>`;
 
-    view.querySelectorAll<HTMLButtonElement>('[data-period]').forEach((b) =>
-      b.addEventListener('click', async () => {
-        period = b.dataset.period as PeriodId;
-        try {
-          localStorage.setItem('period', period);
-        } catch {}
-        render();
-        try {
-          await app.ensureGames(days());
-        } catch (e) {
-          toast(esc((e as Error).message), 'warn');
-        }
-      }),
-    );
+    view.querySelectorAll<HTMLButtonElement>('[data-period]').forEach((b) => b.addEventListener('click', () => setPeriod(b.dataset.period as PeriodId)));
     view.querySelectorAll<HTMLButtonElement>('[data-tc]').forEach((b) =>
       b.addEventListener('click', () => {
         const id = b.dataset.tc!;
@@ -179,7 +166,13 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       }),
     );
     view.querySelector('[data-live]')?.addEventListener('click', () => app.setTimeClasses(LIVE_TIME_CLASSES));
-    view.querySelector('[data-all]')?.addEventListener('click', () => app.setTimeClasses([]));
+    view.querySelectorAll('[data-all]').forEach((b) =>
+      b.addEventListener('click', () => {
+        app.setTimeClasses([]);
+        if (!app.job && app.gamesIn(days()).some((g) => !app.analyses.has(g.id))) app.analyze(days(), 20);
+      }),
+    );
+    view.querySelector<HTMLButtonElement>('[data-period-go]')?.addEventListener('click', (e) => setPeriod((e.currentTarget as HTMLElement).dataset.periodGo as PeriodId));
     view.querySelector('[data-analyze]')?.addEventListener('click', (e) => {
       const n = Number((e.currentTarget as HTMLElement).dataset.analyze);
       app.analyze(days(), n);
@@ -189,6 +182,20 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     view.querySelector<HTMLSelectElement>('[data-depth]')?.addEventListener('change', (e) => app.setDepth(Number((e.target as HTMLSelectElement).value)));
     sig = signature();
   };
+
+  async function setPeriod(id: PeriodId) {
+    period = id;
+    try {
+      localStorage.setItem('period', period);
+    } catch {}
+    render();
+    try {
+      await app.ensureGames(days());
+      if (!app.job && app.analyses.size === 0 && app.gamesIn(days()).length) app.analyze(days(), 20);
+    } catch (e) {
+      toast(esc((e as Error).message), 'warn');
+    }
+  }
 
   const signature = () => `${app.timeClasses.join(',')}|${app.games.length}|${app.analyses.size}|${app.job?.done ?? '-'}|${app.job ? 1 : 0}|${app.fetching ? 1 : 0}|${period}|${app.progress?.xp}`;
 
@@ -202,7 +209,10 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       const frac = (j.done + (j.plyDone && j.plyTotal ? j.plyDone / j.plyTotal : 0)) / j.total;
       return `<div class="st-row"><span class="spin"></span><div class="st-text"><b>Stockfish is investigating game ${j.done + 1} of ${j.total}</b><span>${esc(j.current ?? '')} · you can start training already</span></div><div class="bar wide"><i id="job-bar" style="width:${frac * 100}%"></i></div><button class="btn small ghost" data-stop>Pause</button></div>`;
     }
-    const sync = app.lastSync() ? `Synced ${new Date(app.lastSync()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not synced yet';
+    if (!games) return emptyHtml();
+    const newest = app.games[0]?.endTime;
+    const lastGame = newest && newest < Date.now() / 1000 - 30 * 86400 ? ` · last game ${new Date(newest * 1000).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
+    const sync = (app.lastSync() ? `Synced ${new Date(app.lastSync()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not synced yet') + lastGame;
     return `<div class="st-row">
       <span class="st-ico">${pending ? '🔎' : '✅'}</span>
       <div class="st-text"><b>${analyzed} of ${games} games analyzed</b><span>${sync} · <a href="javascript:void 0" data-sync>refresh</a></span></div>
@@ -211,6 +221,33 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
       </select></label>
       ${pending ? `<button class="btn primary small" data-analyze="${Math.min(pending, 25)}">Analyze ${Math.min(pending, 25)} more</button>` : ''}
     </div>`;
+  };
+
+  /** Why there is nothing to analyze, and the one tap that fixes it — never a bare "0 of 0". */
+  const emptyHtml = () => {
+    const d = days();
+    const label = PERIODS.find((p) => p.id === period)!.label;
+    const inWindow = app.games.filter((g) => g.endTime > Date.now() / 1000 - d * 86400);
+    const last = app.games[0]?.endTime ?? app.lastPlayed ?? null;
+    const when = last ? new Date(last * 1000).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    const sync = `<a href="javascript:void 0" data-sync>refresh</a>`;
+    let msg: string;
+    let action = '';
+    if (inWindow.length) {
+      // Games exist, but the game-type filter hides them all.
+      const types = [...new Set(inWindow.map((g) => (['bullet', 'blitz', 'rapid'].includes(g.timeClass) ? g.timeClass : 'daily')))];
+      msg = `<b>Your ${inWindow.length} game${inWindow.length === 1 ? '' : 's'} in the last ${esc(label)} ${inWindow.length === 1 ? 'is' : 'are'} ${esc(types.join(' / '))}, which ${types.length === 1 ? 'is' : 'are'} switched off.</b><span>Switch the game type on to analyze ${inWindow.length === 1 ? 'it' : 'them'}.</span>`;
+      action = `<button class="btn primary small" data-all>Show all game types</button>`;
+    } else if (last && Date.now() / 1000 - last <= 1095 * 86400) {
+      const fit = PERIODS.find((p) => app.games.some((g) => g.endTime > Date.now() / 1000 - p.days * 86400 && app.includes(g.timeClass)));
+      msg = `<b>No games in the last ${esc(label)}.</b><span>Your last game was on ${esc(when)} · ${sync}</span>`;
+      if (fit) action = `<button class="btn primary small" data-period-go="${fit.id}">Look back ${esc(fit.label)}</button>`;
+    } else if (last) {
+      msg = `<b>Your last chess.com game was on ${esc(when)} — more than 3 years ago.</b><span>Play a few games on chess.com, then come back and ${sync}.</span>`;
+    } else {
+      msg = `<b>No games found on chess.com for ${esc(app.profile?.username ?? app.username)} yet.</b><span>Play a few games on chess.com, then come back and ${sync}.</span>`;
+    }
+    return `<div class="st-row"><span class="st-ico">🔍</span><div class="st-text">${msg}</div>${action}</div>`;
   };
 
   const off = app.on(() => {
@@ -228,10 +265,17 @@ export function renderDashboard(view: HTMLElement, params: URLSearchParams) {
     try {
       await app.ensureGames(Math.max(120, days()), params.has('first'));
       if (params.has('first') || app.analyses.size === 0) {
-        if (app.games.length) app.analyze(Math.max(30, days()), 20);
-        else toast('No standard chess games found in the last 120 days. Try a longer period.', 'warn', 6000);
-        if (app.games.length && !app.gamesIn(Math.max(30, days())).length)
-          toast('No games of the selected types in this period — try switching on more game types.', 'info', 6000);
+        // Plays rarely? Show the shortest period that has games (and say why).
+        if (!app.gamesIn(days()).length) {
+          const fit = PERIODS.find((p) => app.gamesIn(p.days).length);
+          if (fit && fit.id !== period) {
+            const from = PERIODS.find((p) => p.id === period)!.label;
+            period = fit.id;
+            render();
+            toast(`No games in the last ${esc(from)}, so here is the last ${esc(fit.label)}.`, 'info', 6000);
+          }
+        }
+        if (app.gamesIn(days()).length) app.analyze(days(), 20);
       }
     } catch (e) {
       toast(esc((e as Error).message), 'warn', 6000);
