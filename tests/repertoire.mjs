@@ -47,6 +47,9 @@ await page.waitForSelector('.dash-head');
 await page.waitForFunction(() => /games analyzed/.test(document.querySelector('.status')?.textContent ?? ''), null, { timeout: 600000 });
 check('menu has a Repertoire tab', !!(await page.$('nav a[href="#/repertoire"]')));
 
+// Board clicks (White at the bottom).
+const sq = async (s) => { const b = await page.$eval('#board cg-board', (e) => e.getBoundingClientRect().toJSON()); const f = s.charCodeAt(0) - 97, r = +s[1] - 1, z = b.width / 8; return { x: b.x + (f + 0.5) * z, y: b.y + (7 - r + 0.5) * z }; };
+const move = async (u) => { const a = await sq(u.slice(0, 2)), b = await sq(u.slice(2, 4)); await page.mouse.click(a.x, a.y); await page.waitForTimeout(60); await page.mouse.click(b.x, b.y); };
 for (const color of ['white', 'black']) {
   await page.goto(`http://localhost:${port}/#/repertoire?color=${color}`);
   const t = Date.now();
@@ -94,6 +97,37 @@ for (const color of ['white', 'black']) {
     await page.keyboard.press('ArrowRight');
     const c2 = await where();
     check('step through a line with ◀ ▶ and the arrow keys', a !== b && b !== c2, `${a} → ${b} → ${c2}`);
+    // Voice: quiet by default, a ▶ Listen button in the coach panel
+    await page.waitForSelector('.coach-view .listen', { timeout: 60000 }).catch(() => {});
+    check('coach panel has ▶ Listen (nothing plays by itself)', !!(await page.$('.coach-view .listen')));
+
+    // Save my own extra line: play both sides, Stockfish checks my moves
+    await page.click('[data-add]');
+    await page.waitForSelector('.rep-edit');
+    await page.click('[data-clear]');
+    const edits = () => page.evaluate(() => window.__repEdit?.().moves.join(' '));
+    for (const u of ['e2e4', 'e7e5', 'f1a6']) { await move(u); await page.waitForTimeout(150); }
+    await page.waitForFunction(() => /prefers|good move/.test(document.querySelector('.edit-eval')?.textContent ?? ''), null, { timeout: 30000 }).catch(() => {});
+    const warn = await page.textContent('.edit-eval');
+    check('new line: Stockfish warns about a bad move (2.Ba6?)', /⚠️/.test(warn) && /prefers/.test(warn), warn.replace(/\s+/g, ' ').slice(0, 120));
+    await page.click('[data-undo]');
+    for (const u of ['g1f3', 'b8c6']) { await move(u); await page.waitForTimeout(150); }
+    check('new line: undo and both sides can be played', (await edits()) === 'e2e4 e7e5 g1f3 b8c6', await edits());
+    await page.addScriptTag({ content: axeSource });
+    const ve = (await page.evaluate(() => window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } }))).violations;
+    check('"Save a new line" screen has no accessibility issues', ve.length === 0, ve.map((x) => `${x.id} ${x.nodes[0]?.target}`).join('; '));
+    await page.screenshot({ path: 'tests/screens/repertoire-new-line.png' });
+    await page.fill('#line-name', 'My test line');
+    await page.click('[data-save]');
+    await page.waitForSelector('.rep-line.mine', { timeout: 10000 }).catch(() => {});
+    const mineTitle = await page.$eval('.rep-line.mine .rep-title', (e) => e.textContent).catch(() => '');
+    check('new line is saved and listed with its name', /My test line/.test(mineTitle), mineTitle);
+    await page.reload();
+    await page.waitForSelector('.rep-line');
+    check('saved line is still there after a reload (in your profile)', /My test line/.test(await page.$eval('.rep-line.mine .rep-title', (e) => e.textContent).catch(() => '')));
+    await page.click('.rep-line.mine .mv.saved');
+    const savedNote = await page.textContent('.rep-note');
+    check('tapping a saved move explains it', /saved this line yourself/.test(savedNote));
   }
 }
 await page.addScriptTag({ content: axeSource });
@@ -104,8 +138,6 @@ check('repertoire page has no accessibility issues', v.length === 0, v.map((x) =
 await page.goto(`http://localhost:${port}/#/repertoire?color=white&practice=1`);
 await page.waitForSelector('#board cg-board');
 const until = async (cond, ms = 15000) => { const end = Date.now() + ms; while (Date.now() < end) { const s = await page.evaluate(() => window.__rep?.()); if (s && cond(s)) return s; await page.waitForTimeout(100); } return null; };
-const sq = async (s) => { const b = await page.$eval('#board cg-board', (e) => e.getBoundingClientRect().toJSON()); const f = s.charCodeAt(0) - 97, r = +s[1] - 1, z = b.width / 8; return { x: b.x + (f + 0.5) * z, y: b.y + (7 - r + 0.5) * z }; };
-const move = async (u) => { const a = await sq(u.slice(0, 2)), b = await sq(u.slice(2, 4)); await page.mouse.click(a.x, a.y); await page.waitForTimeout(60); await page.mouse.click(b.x, b.y); };
 let st = await until((s) => s.interactive && s.expected);
 await move(st.expected);
 await page.waitForSelector('.msg.good', { timeout: 5000 }).catch(() => {});
@@ -129,6 +161,17 @@ const done = await page.waitForSelector('text=Line complete', { timeout: 10000 }
 check('practice: your own note appears at that move', /Your note: My favourite opening move/.test(await page.textContent('.feed')));
 check('practice: finishing a line gives XP', done);
 await page.screenshot({ path: 'tests/screens/repertoire-practice.png' });
+const practiceLines = await page.$eval('.rep-progress', (e) => e.textContent);
+await page.goto(`http://localhost:${port}/#/repertoire?color=white`);
+await page.waitForSelector('.rep-line');
+const builtLines = await page.$$eval('.rep-line', (l) => l.length);
+check('practice includes your saved line', new RegExp(`of ${builtLines}\\b`).test(practiceLines), `${practiceLines} / ${builtLines} lines listed`);
+await page.click('.rep-line.mine .mv.saved');
+await page.click('[data-del]');
+check('delete needs a second tap', !!(await page.$('.rep-line.mine')));
+await page.click('[data-del]');
+await page.waitForTimeout(500);
+check('saved line can be deleted', !(await page.$('.rep-line.mine')));
 
 // iPad portrait: menu with 7 tabs still fits
 const ipad = await browser.newContext({ ...devices['iPad Mini'] });

@@ -58,6 +58,23 @@ function monthKey(url: string) {
  * Download games ending after `sinceSec`. `onProgress` reports months done.
  * Returns every standard-chess game, newest first.
  */
+/**
+ * When did this player last finish a standard chess game? Looks at the newest
+ * months on chess.com (up to 3 with games). null = no games at all.
+ */
+export async function lastGameTime(username: string): Promise<number | null> {
+  const u = username.toLowerCase();
+  const { archives } = await getJson(`${API}/${encodeURIComponent(u)}/games/archives`);
+  const list = (archives as string[]).slice(-3).reverse();
+  for (const url of list) {
+    const data = await getJson(url);
+    const games = (data.games as any[]).map((g) => toRecord(g, u)).filter((g): g is GameRecord => !!g);
+    if (games.length) return Math.max(...games.map((g) => g.endTime));
+    await sleep(350); // be gentle with chess.com
+  }
+  return null;
+}
+
 export async function fetchGames(
   username: string,
   sinceSec: number,

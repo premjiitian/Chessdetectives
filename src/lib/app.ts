@@ -2,7 +2,7 @@
 // Views read from here and listen for changes.
 
 import * as store from './store';
-import { fetchGames, fetchProfile, type Profile } from './chesscom';
+import { fetchGames, fetchProfile, type Profile, lastGameTime } from './chesscom';
 import { analyzeGame } from './analyzer';
 import { browserEngine, type Engine } from './engine';
 import { loadProgress, saveProgress, type Progress } from './training';
@@ -44,6 +44,10 @@ class AppState {
   profile: Profile | null = null;
   games: GameRecord[] = [];
   fetchedDays = 0;
+  /** End time (s) of the player's newest standard game on chess.com, when known; null = none at all. */
+  lastPlayed: number | null | undefined = undefined;
+  /** True while downloading older games because nothing recent was found. */
+  lookingBack = false;
   analyses = new Map<string, GameAnalysis>();
   progress: Progress | null = null;
   job: AnalysisJob | null = null;
@@ -160,14 +164,36 @@ class AppState {
         this.fetching = { done, total };
         this.emit();
       });
+      let window = Math.max(days, this.fetchedDays);
+      // Nothing recent? Ask chess.com when the last game was and look back that far
+      // (up to 3 years), instead of ending in an empty "0 of 0 games".
+      if (!games.length) {
+        this.lastPlayed = await lastGameTime(this.username);
+        const ago = this.lastPlayed ? Math.ceil((Date.now() / 1000 - this.lastPlayed) / 86400) + 1 : Infinity;
+        if (ago > window && ago <= 1095) {
+          // Show the period that contains the last game (1 or 3 years), and download
+          // the year of games before it — not just that day (only 1 game), and not
+          // 3 whole years (heavy players have thousands of games a month).
+          const from = Math.max(Math.floor(Date.now() / 1000) - PERIODS.find((p) => p.days >= ago)!.days * 86400, this.lastPlayed! - 365 * 86400);
+          this.lookingBack = true;
+          games.push(
+            ...(await fetchGames(this.username, from, (done, total) => {
+              this.fetching = { done, total };
+              this.emit();
+            })),
+          );
+          window = Math.floor((Date.now() / 1000 - from) / 86400);
+        }
+      } else this.lastPlayed = games[0].endTime;
       this.games = games;
-      this.fetchedDays = Math.max(days, this.fetchedDays);
+      this.fetchedDays = window;
       await store.set(`games:${this.username}`, games);
       await store.set(`fetched-days:${this.username}`, this.fetchedDays);
       this.lastSyncAt = Date.now();
       await store.set(`last-sync:${this.username}`, this.lastSyncAt);
     } finally {
       this.fetching = null;
+      this.lookingBack = false;
       this.emit();
     }
   }

@@ -1,5 +1,10 @@
 /* Chess Detectives — board colours taken from the reference snapshot. */
 :root {
+  /* Notch / home bar / rounded corners (iPhone app and home-screen app). Tests can override these. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   --sq-light: #f3f6fb;
   --sq-dark: #6595ea;
   --accent: #3f74e0;
@@ -115,7 +120,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; }
 .empty { color: var(--muted); padding: 18px 0; text-align: center; }
 
 /* ---------- welcome ---------- */
-.welcome { max-width: 1180px; margin: 0 auto; padding: 40px 24px; }
+.welcome { max-width: 1180px; margin: 0 auto; padding: max(40px, calc(var(--safe-top) + 16px)) max(24px, var(--safe-right)) max(40px, var(--safe-bottom)) max(24px, var(--safe-left)); }
 .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: center; }
 .kicker { font-weight: 700; color: var(--accent-ink); letter-spacing: 0.02em; margin-bottom: 10px; }
 .hero h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); letter-spacing: -0.02em; }
@@ -369,6 +374,14 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 .my-note label { font-weight: 700; }
 .my-note textarea { width: 100%; font: inherit; font-size: max(16px, 1em); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); resize: vertical; }
 .my-note textarea:focus { outline: 3px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
+.mv.saved { border-color: var(--gold); border-width: 2px; }
+.rk.saved { background: var(--alt-soft); color: var(--alt-ink); }
+.rep-line.mine { border-left: 4px solid var(--gold); }
+.rep-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.rep-edit h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.rep-edit .edit-moves { font-size: 1.05rem; min-height: 1.4em; }
+.edit-name { display: grid; gap: 4px; font-weight: 600; margin: 8px 0; }
+.edit-name input { font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
 .mv.has-note::after { content: ' 📝'; font-size: 0.85em; }
 .your-note { background: var(--alt-soft); padding: 6px 10px; border-radius: 8px; }
 @media (pointer: coarse) { .mv { min-height: 44px; padding: 6px 10px; } }
@@ -419,7 +432,8 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 
 /* ---------- coach panel: buttons always in view on wide screens ---------- */
 @media (min-width: 821px) {
-  .trainer .coach-col { position: sticky; top: 76px; max-height: calc(100vh - 92px); display: flex; flex-direction: column; gap: 12px; }
+  /* The column starts ~104px down before scrolling (76px once sticky): size it for the lower start. */
+  .trainer .coach-col { position: sticky; top: 76px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; gap: 12px; }
   .trainer .coach-col > * { flex: none; }
   .trainer .coach-col > .feed { flex: 1 1 auto; min-height: 140px; max-height: none; overflow-y: auto; }
   .trainer.rep .coach-col { position: static; max-height: none; display: grid; }
@@ -438,8 +452,8 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
   .who .uname { display: none; }
 }
 /* Home-screen app mode: keep clear of the status bar and rounded corners. */
-.topbar { padding-top: max(10px, env(safe-area-inset-top)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
-.foot { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.topbar { padding-top: max(10px, var(--safe-top)); padding-left: max(24px, var(--safe-left)); padding-right: max(24px, var(--safe-right)); }
+.foot { padding-bottom: max(24px, var(--safe-bottom)); }
 /* Safari zooms into any text box smaller than 16px — keep inputs at 16px+. */
 input:not([type=checkbox]), select, textarea { font-size: max(16px, 1em); }
 .connect input:not([type=checkbox]) { font-size: 17px; }
@@ -450,7 +464,7 @@ button, a, select, summary { -webkit-tap-highlight-color: transparent; }
 @media (pointer: coarse) {
   /* Finger-sized targets (Apple recommends 44pt). */
   .btn, .btn.small, select, .sp, .chip-reveal, .tabs button, .voice-more summary, .topbar nav a { min-height: 44px; }
-  .msg .replay { padding: 10px; top: 0; right: 0; opacity: 0.7; }
+  .listen { min-height: 44px; }
   .always { min-height: 44px; }
   .always input { width: 22px; height: 22px; }
 }
@@ -498,8 +512,9 @@ button, a, select, summary { -webkit-tap-highlight-color: transparent; }
 .voice-more label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.85em; }
 .voice-more select { max-width: 200px; }
 .msg { position: relative; }
-.msg .replay { position: absolute; top: 6px; right: 6px; border: 0; background: transparent; cursor: pointer; font-size: 0.95rem; opacity: 0.45; padding: 2px; }
-.msg .replay:hover, .msg .replay:focus-visible { opacity: 1; }
+.listen { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--accent-ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.listen:hover, .listen:focus-visible { background: var(--accent-soft); }
+.coach-view > .listen { margin: 0 0 8px; }
 .msg.coach::before, .msg h4, .msg > p:first-child { padding-right: 18px; }
 
 /* hidden-until-tapped puzzle tags */
@@ -571,7 +586,7 @@ section.card { margin-bottom: 16px; }
   .coach-col .controls .btn { flex: 1; }
   .board-col { position: static; }
   .hero { grid-template-columns: 1fr; gap: 28px; }
-  .topbar { flex-wrap: wrap; padding: 8px 16px; gap: 8px; }
+  .topbar { flex-wrap: wrap; padding: max(8px, var(--safe-top)) max(16px, var(--safe-right)) 8px max(16px, var(--safe-left)); gap: 8px; }
   .topbar nav { order: 3; flex-basis: 100%; overflow-x: auto; }
   /* Phone menu: icon with a small word under it, so nothing is a guess. */
   .topbar nav { gap: 2px; }
@@ -581,7 +596,7 @@ section.card { margin-bottom: 16px; }
   .cta .btn { align-self: stretch; }
   .who .uname { display: none; }
   main { padding: 16px; }
-  .welcome { padding: 24px 16px; }
+  .welcome { padding: max(24px, calc(var(--safe-top) + 12px)) max(16px, var(--safe-right)) max(24px, var(--safe-bottom)) max(16px, var(--safe-left)); }
   .feed { max-height: none; }
 }
 @media (max-width: 520px) {

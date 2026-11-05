@@ -13,6 +13,7 @@ import { renderPlay } from './views/play';
 import { renderProgress } from './views/progress';
 import { renderChapters } from './views/chapters';
 import { renderRepertoire } from './views/repertoire';
+import { isNativeApp, routeExternalLinks } from './lib/native';
 
 export type Cleanup = (() => void) | void;
 const root = document.getElementById('app')!;
@@ -115,8 +116,12 @@ app.restore().then(() => {
   route();
   app.initCloud();
 });
+routeExternalLinks();
+if (isNativeApp()) document.documentElement.classList.add('native-app');
+if (import.meta.env.VITE_SELFTEST && !location.search.includes('noselftest')) import('./lib/selftest').then((m) => m.runSelfTest());
 // Offline support (built site only; the dev server always serves fresh files).
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// The iOS app already has every file on the device, so it needs no helper.
+if ('serviceWorker' in navigator && import.meta.env.PROD && !isNativeApp()) {
   window.addEventListener('load', async () => {
     try {
       await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);

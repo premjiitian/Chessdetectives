@@ -6,7 +6,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { THEMES } from '../src/lib/themes';
 import { pinLines } from '../src/lib/pin';
-import { explainBest, explainFailure, hints } from '../src/lib/coach';
+import { explainBest, explainFailure, hints, moveBrief } from '../src/lib/coach';
 import { CHAPTERS } from '../src/lib/chapters';
 
 function syllables(word: string): number {
@@ -59,14 +59,23 @@ describe('kid-friendly reading level', () => {
     const user = (process.env.FIXTURE_USER ?? 'erik').toLowerCase();
     const games = readdirSync(dir).filter((f) => /^\d{4}-\d{2}\.json$/.test(f)).flatMap((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')).games).filter((g: any) => g.rules === 'chess').slice(0, Number(process.env.MAX_GAMES ?? 6));
     const texts: string[] = [];
+    const briefs: string[] = [];
     for (const g of games) {
       const a = await analyzeGame(engine, { id: g.url, pgn: g.pgn, timeControl: g.time_control, userColor: g.white.username.toLowerCase() === user ? 'white' : 'black' } as any, 8);
       for (const m of a.mistakes) {
         texts.push(...explainBest(m.fenBefore, { uci: m.pv, cp: 0, mate: null, depth: 8 }).filter((t) => !/main line/.test(t)));
         texts.push(...explainFailure(m.fenBefore, m.playedUci, { uci: m.refutation, cp: 0, mate: null, depth: 8 }).filter((t) => !/continuation/.test(t)));
+        // The spoken summaries (▶ Listen): good move and wrong move.
+        briefs.push(moveBrief(m.fenBefore, { uci: m.pv, cp: 0, mate: null }, 'good'));
+        briefs.push(moveBrief(m.fenBefore, { uci: [m.playedUci, ...m.refutation], cp: -300, mate: null }, 'wrong', 'look for checks, captures and threats first.'));
       }
     }
     engine.terminate();
     report('Generated explanations', texts);
+    const b = report('Spoken summaries (▶ Listen)', briefs.filter(Boolean));
+    // Kids listen to these: easy words, and short (≤ 60 words each).
+    expect(b.avg).toBeLessThanOrEqual(6);
+    const long = briefs.filter((t) => t.split(/\s+/).length > 60);
+    expect(long, long.join('\n')).toEqual([]);
   }, 600_000);
 });

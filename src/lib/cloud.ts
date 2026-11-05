@@ -4,6 +4,7 @@
 // (see SETUP-SIGN-IN.md). Without it the app works exactly as before and
 // everything stays in this browser.
 
+import { isNativeApp } from './native';
 import type { Progress, XpEntry } from './training';
 
 export interface CloudUser {
@@ -32,6 +33,9 @@ let fbPromise: Promise<FB | null> | null = null;
 
 /** The Firebase web config, or null when sign-in is not set up. */
 export function cloudConfig(): Promise<Record<string, string> | null> {
+  // Google sign-in pop-ups don't work inside the iOS app (and Apple requires
+  // Sign in with Apple next to it), so the app keeps progress on the device.
+  if (isNativeApp()) return (configPromise ??= Promise.resolve(null));
   configPromise ??= fetch(`${import.meta.env.BASE_URL}firebase-config.json`, { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((c) => (c && c.apiKey && c.projectId && !String(c.apiKey).includes('PASTE') ? c : null))
@@ -144,12 +148,13 @@ export function mergeProgress(a: Progress, b: Progress | undefined): Progress {
     badges: [...new Set([...(a.badges ?? []), ...(b.badges ?? [])])],
     chapters: [...new Set([...(a.chapters ?? []), ...(b.chapters ?? [])])].sort((x, y) => x - y),
     log,
-    notes: mergeNotes(a.notes, b.notes),
+    notes: newestWins(a.notes, b.notes),
+    myLines: newestWins(a.myLines, b.myLines),
   };
 }
 
-/** Notes: for each move, the most recently edited version wins (also deletions). */
-function mergeNotes(a?: Progress['notes'], b?: Progress['notes']): Progress['notes'] {
+/** Notes and saved lines: for each key, the most recently edited version wins (also deletions). */
+function newestWins<T extends { t: number }>(a?: Record<string, T>, b?: Record<string, T>): Record<string, T> | undefined {
   if (!a && !b) return undefined;
   const out = { ...(b ?? {}) };
   for (const [k, n] of Object.entries(a ?? {})) if (!out[k] || n.t >= out[k].t) out[k] = n;

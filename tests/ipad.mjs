@@ -92,6 +92,14 @@ for (const [label, dev] of profiles) {
   check('whole board is visible without scrolling', board.bottom <= vh + 1 && board.top >= 0, `board ${Math.round(board.top)}–${Math.round(board.bottom)} of ${vh}px`);
   check('Hint button is visible next to the board', hint.bottom <= vh + 1, `hint at ${Math.round(hint.top)}px`);
   check('trainer fits the screen', await noSideScroll());
+  // Worst case, whatever puzzle comes first: a long chat must scroll, not push Hint off screen.
+  await page.evaluate(() => {
+    const f = document.querySelector('.feed');
+    for (let i = 0; i < 12; i++) f.insertAdjacentHTML('beforeend', '<div class="msg coach"><p>A long coach message that fills the chat. '.repeat(1) + 'More words. '.repeat(30) + '</p></div>');
+  });
+  const hintFull = await page.$eval('[data-act=hint]', (e) => e.getBoundingClientRect().bottom);
+  check('Hint stays on screen even with a long coach chat', hintFull <= vh + 1, `hint bottom ${Math.round(hintFull)} of ${vh}px`);
+  await page.evaluate(() => document.querySelectorAll('.feed .msg').forEach((m, i, all) => i >= all.length - 12 && m.remove()));
 
   // Tap-to-move: tap one of your pieces, then a legal square.
   // Poll properly (a returned Promise would count as "true" immediately).

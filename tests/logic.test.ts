@@ -392,3 +392,29 @@ describe('grandmaster-coach panel', () => {
     expect(getNote(mergeProgress(p, newer), k)).toBe('My favourite!');
   });
 });
+
+import { saveMyLine, deleteMyLine, myLinesFor } from '../src/lib/training';
+import { lineFromMoves, isReply } from '../src/lib/repertoire';
+describe('my saved repertoire lines', () => {
+  it('a saved line becomes repertoire moves: mine to play, theirs played by the app', () => {
+    const l = lineFromMoves('black', ['e2e4', 'c7c5', 'g1f3', 'd7d6'], 'My Sicilian');
+    expect(l.map((m) => m.san)).toEqual(['e4', 'c5', 'Nf3', 'd6']);
+    expect(l.map((m) => isReply(m.kind))).toEqual([true, false, true, false]);
+    expect(l[0].children[0]).toBe(l[1]);
+    expect(l[3].opening).toBe('My Sicilian');
+    // Stops at an illegal move instead of breaking.
+    expect(lineFromMoves('white', ['e2e4', 'e2e4']).length).toBe(1);
+  });
+  it('save, rename, delete, and sync between devices (newest wins)', () => {
+    const p = emptyProgress('kid');
+    const id = saveMyLine(p, 'white', 'Italian', ['e2e4', 'e7e5'], 1);
+    expect(saveMyLine(p, 'white', 'Italian Game', ['e2e4', 'e7e5'], 2)).toBe(id); // same moves = same line
+    expect(myLinesFor(p, 'white').map(([, l]) => l.name)).toEqual(['Italian Game']);
+    expect(myLinesFor(p, 'black')).toEqual([]);
+    const other = emptyProgress('kid');
+    saveMyLine(other, 'white', 'Italian', ['e2e4', 'e7e5'], 1);
+    deleteMyLine(other, id, 5); // deleted later on another device
+    expect(myLinesFor(mergeProgress(p, other), 'white')).toEqual([]);
+    expect(myLinesFor(mergeProgress(other, p), 'white')).toEqual([]);
+  });
+});

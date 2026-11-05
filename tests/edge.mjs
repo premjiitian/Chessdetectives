@@ -87,9 +87,10 @@ const connect = async (page, name) => {
   await page.waitForSelector('.dash-head', { timeout: 15000 });
   await page.waitForTimeout(2500);
   const headline = await page.textContent('.headline');
-  const toasts = await page.$$eval('.toast', (t) => t.map((x) => x.textContent).join(' | '));
-  check('no-games player sees a helpful dashboard', /No games|play a few/i.test(headline), headline);
-  check('no-games player gets guidance', toasts.length > 0, toasts);
+  // Guidance stays on screen in the status box (it used to be a 6-second toast).
+  const box = await page.$eval('.status', (e) => e.innerText.replace(/\s+/g, ' ')).catch(() => '');
+  check('no-games player sees a helpful dashboard', /No games|play a few|find your games/i.test(headline) && !/\b0 of 0 games/.test(box), headline);
+  check('no-games player gets guidance that stays on screen', /No games found on chess.com for newbie/i.test(box) && /play a few games/i.test(box), box.slice(0, 120));
   await page.goto(`http://localhost:${port}/#/train`);
   await page.waitForTimeout(800);
   check('train page explains there are no cases yet', /No cases yet|Analyze/i.test(await page.textContent('main')));
@@ -220,7 +221,8 @@ const connect = async (page, name) => {
   await page.waitForTimeout(500);
   await page.goto(`http://localhost:${port}/#/train`);
   st = await until((s) => s.interactive, 60000);
-  check('trainer recovers after navigating away and back', !!st);
+  const why = st ? '' : JSON.stringify({ step: await step().catch((e) => e.message.slice(0, 80)), feed: (await page.$eval('.feed', (e) => e.innerText).catch(() => 'no feed')).slice(-200) });
+  check('trainer recovers after navigating away and back', !!st, why);
   check('no page errors during puzzle flows', page.errors.length === 0, page.errors.join(' | '));
 
   // f) phone layout with the voice controls

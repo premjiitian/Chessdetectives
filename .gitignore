@@ -4,3 +4,4 @@ public/engine/
 *.log
 .DS_Store
 tests/screens/
+dist-selftest

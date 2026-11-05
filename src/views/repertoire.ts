@@ -2,16 +2,18 @@
 // moves, explained by Professor Pin, and practised move by move.
 
 import { app } from '../lib/app';
-import { coachView, describeMove } from '../lib/coach';
+import { coachView, describeMove, evalWords, moveBrief } from '../lib/coach';
 import { getEngine } from '../lib/engine';
 import { winPercent } from '../lib/evaluation';
-import { allLines, buildRepertoire, countMoves, type RepMove, type Repertoire } from '../lib/repertoire';
+import { allLines, buildRepertoire, countMoves, isReply, lineFromMoves, type RepMove, type Repertoire } from '../lib/repertoire';
 import * as store from '../lib/store';
-import { getNote, noteKey, setNote, shuffle } from '../lib/training';
+import { deleteMyLine, getNote, myLinesFor, noteKey, saveMyLine, setNote, shuffle } from '../lib/training';
+import { flip } from '../lib/evaluation';
+import type { EngineLine } from '../lib/types';
 import type { Color } from '../lib/types';
 import { Board } from '../ui/board';
 import { $, esc, md, toast } from '../ui/dom';
-import { speak, stop as stopVoice, voiceControl } from '../lib/voice';
+import { listenButton, stop as stopVoice, voiceControl } from '../lib/voice';
 
 const KIND: Record<RepMove['kind'], { badge: string; cls: string }> = {
   yours: { badge: '✓ your move', cls: 'yours' },
@@ -19,7 +21,16 @@ const KIND: Record<RepMove['kind'], { badge: string; cls: string }> = {
   engine: { badge: '★ Stockfish', cls: 'engine' },
   reply: { badge: 'opponent', cls: 'reply' },
   'engine-reply': { badge: 'opponent (Stockfish)', cls: 'reply' },
+  saved: { badge: '📌 my saved line', cls: 'saved' },
+  'saved-reply': { badge: 'opponent (my saved line)', cls: 'reply' },
 };
+
+/** Your saved lines, as repertoire lines, with their ids. */
+function savedLines(color: Color): { id: string; name: string; line: RepMove[] }[] {
+  return myLinesFor(app.progress, color)
+    .map(([id, l]) => ({ id, name: l.name, line: lineFromMoves(color, l.moves, l.name) }))
+    .filter((x) => x.line.length);
+}
 
 const repKey = (color: Color) => `repertoire:${app.username}:${color}`;
 const pct = (x: number | null) => (x === null ? '' : `${Math.round(x * 100)}%`);
@@ -102,9 +113,14 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
     }
   }
 
-  function renderBrowse(r: Repertoire) {
+  function renderBrowse(r: Repertoire, focusId = '') {
+    offKeys();
+    board?.destroy();
+    board = null;
     const c = countMoves(r);
-    const lines = allLines(r);
+    const saved = savedLines(color);
+    const lines = [...saved.map((x) => x.line), ...allLines(r)];
+    const savedId = (i: number) => saved[i]?.id;
     view.innerHTML = header(`
       <div class="trainer rep">
         <div class="board-col">
@@ -117,7 +133,8 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
         <aside class="coach-col">
           <div class="card rep-summary">
             <p><b>${c.lines} lines</b> from <b>${r.games} of your games</b> as ${color}: ${c.yours} of your moves kept <span class="rk yours">✓ your style</span>, ${c.upgrades} upgrade${c.upgrades === 1 ? '' : 's'} <span class="rk upgrade">⬆</span>, Stockfish fills the gaps <span class="rk engine">★</span>.</p>
-            <button class="btn small ghost" data-rebuild>↻ Rebuild with my latest games</button>
+            <div class="rep-actions"><button class="btn small" data-add>➕ Save a new line</button><button class="btn small ghost" data-rebuild>↻ Rebuild with my latest games</button></div>
+            ${saved.length ? `<p class="sub">📌 ${saved.length} line${saved.length === 1 ? '' : 's'} you saved yourself (kept when you rebuild).</p>` : ''}
           </div>
           <div class="card rep-note" aria-live="polite"><p class="sub">Tap any move to see the position and why it's in your repertoire.</p></div>
           <div class="rep-lines">${lines
@@ -125,7 +142,7 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
               const prev = lines[i - 1] ?? [];
               const shared = line.findIndex((m, k) => prev[k] !== m);
               const name = [...line].reverse().find((m) => m.opening)?.opening ?? 'Your line';
-              return `<div class="card rep-line"><div class="rep-title">${esc(name)}</div><div class="rep-moves">${line
+              return `<div class="card rep-line ${i < saved.length ? 'mine' : ''}"><div class="rep-title">${i < saved.length ? '📌 ' : ''}${esc(name)}</div><div class="rep-moves">${line
                 .map((m, k) => `<button class="mv ${KIND[m.kind].cls} ${k < shared ? 'shared' : ''}" data-line="${i}" data-k="${k}" title="${esc(KIND[m.kind].badge)}">${k === 0 || m.ply % 2 ? `<span class="no">${moveNo(m)}</span>` : ''}${esc(m.san)}</button>`)
                 .join('')}</div></div>`;
             })
@@ -159,7 +176,8 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
       view.querySelectorAll('.mv.on').forEach((b) => b.classList.remove('on'));
       view.querySelector(`.mv[data-line="${lines.indexOf(line)}"][data-k="${k}"]`)?.classList.add('on');
       (view.querySelector('[data-play]') as HTMLAnchorElement).href = `#/play?fen=${encodeURIComponent(m.fen)}&color=${color}`;
-      const mine = m.kind === 'yours' || m.kind === 'upgrade' || m.kind === 'engine';
+      const mine = !isReply(m.kind);
+      const lineIdx = lines.indexOf(line);
       cur = { line, k };
       let html = `<div class="step-nav"><button class="btn small" data-step="-1" ${k === 0 ? 'disabled' : ''} aria-label="Previous move">◀ Prev</button><span class="sub">move ${k + 1} of ${line.length}</span><button class="btn small" data-step="1" ${k + 1 >= line.length ? 'disabled' : ''} aria-label="Next move">Next ▶</button></div>
       <div class="case-top"><span class="rk ${KIND[m.kind].cls}">${KIND[m.kind].badge}</span><b>${moveNo(m)} ${esc(m.san)}</b>${m.opening && m.ply >= 4 ? ` <span class="sub">· ${esc(m.opening)}</span>` : ''}</div>`;
@@ -169,6 +187,9 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
       if (m.kind === 'engine') html += `<p>Your games don't reach this position yet, so here is Stockfish's choice to be ready.</p>`;
       if (m.kind === 'reply') html += `<p>Your opponents played this <b>${m.count}×</b>${m.score !== null ? ` — you scored ${pct(m.score)} in those games` : ''}. Be ready for it.</p>`;
       if (m.kind === 'engine-reply') html += `<p>Stockfish's most testing reply — prepare for it even if you haven't met it yet.</p>`;
+      if (m.kind === 'saved') html += `<p>You saved this line yourself. Stockfish's view of your move is below.</p>`;
+      if (m.kind === 'saved-reply') html += `<p>The opponent's move in a line you saved.</p>`;
+      if (savedId(lineIdx)) html += `<p><button class="btn small ghost" data-del>🗑 Delete this saved line</button></p>`;
       if (!mine) {
         const why = describeMove(before, m.uci, 'opponent').facts;
         if (why.length) html += `<p>${md(`**What it wants:** ${why.join(' ')}`)}</p>`;
@@ -183,6 +204,20 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
         <span class="sub note-status" aria-live="polite"></span></div>`;
       note.innerHTML = html;
       note.querySelectorAll<HTMLButtonElement>('[data-step]').forEach((b) => b.addEventListener('click', () => step(+b.dataset.step!)));
+      const del = note.querySelector<HTMLButtonElement>('[data-del]');
+      del?.addEventListener('click', async () => {
+        // Two taps, so a stray tap never deletes a line.
+        if (!del.dataset.sure) {
+          del.dataset.sure = '1';
+          del.textContent = '🗑 Tap again to delete';
+          return;
+        }
+        if (!app.progress) return;
+        deleteMyLine(app.progress, savedId(lineIdx)!);
+        await app.saveProgress();
+        toast('🗑 Saved line deleted.');
+        renderBrowse(r);
+      });
       wireNote(key, line, k);
       if (mine && m.evalLine) (evalbar.querySelector('i') as HTMLElement).style.height = `${winPercent(m.evalLine)}%`;
 
@@ -203,6 +238,12 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
       const cv = coachView(pos, chosen, cands);
       const box = view.querySelector('.coach-view');
       if (!box) return;
+      // Short spoken summary: is the move good, their best answer, both plans.
+      const chosenLine = cands.find((l) => l.uci[0] === chosen);
+      const gap = chosenLine && cands[0] ? winPercent(cands[0]) - winPercent(chosenLine) : 0;
+      const brief = chosenLine
+        ? (mine ? '' : `They play ${m.san}. Your answer: `) + moveBrief(pos, chosenLine, gap > 10 ? 'wrong' : gap > 3 ? 'okay' : 'good', gap > 10 ? `play ${cv.candidates[0]?.san} instead.` : undefined)
+        : '';
       box.innerHTML = `
         <h4>🧭 ${mine ? 'The position before your move' : 'The position now — your move'}</h4>
         <ul class="cv-summary">${cv.summary.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
@@ -216,6 +257,8 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
         <h4>🎯 The plan</h4>
         ${cv.plan.map((x) => `<p>${md(x)}</p>`).join('')}
         <p class="cv-lesson">🗝️ <b>Key lesson:</b> ${esc(cv.lesson)}</p>`;
+      const b = brief ? listenButton(brief) : null;
+      if (b) box.prepend(b);
     };
 
     const wireNote = (key: string, line: RepMove[], k: number) => {
@@ -250,11 +293,20 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
       view.querySelectorAll<HTMLButtonElement>('.mv').forEach((b) => {
         const line = lines[+b.dataset.line!];
         const k = +b.dataset.k!;
+        if (!line?.[k]) return;
         const before = k ? line[k - 1].fen : r.root.fen;
         b.classList.toggle('has-note', !!getNote(app.progress, noteKey(color, before, line[k].uci)).trim());
       });
     markNotes();
-    if (lines[0]) show(lines[0], 0);
+    const focus = focusId ? saved.findIndex((x) => x.id === focusId) : -1;
+    if (focus >= 0) show(lines[focus], lines[focus].length - 1);
+    else if (lines[0]) show(lines[0], 0);
+    view.querySelector('[data-add]')!.addEventListener('click', () => {
+      offKeys();
+      // Start from the moves up to the one on the board, so you can branch off.
+      const start = cur ? cur.line.slice(0, cur.k + 1).map((m) => m.uci) : [];
+      editLine(r, start);
+    });
 
     view.querySelectorAll<HTMLButtonElement>('.mv').forEach((b) => b.addEventListener('click', () => show(lines[+b.dataset.line!], +b.dataset.k!)));
     view.querySelector('[data-rebuild]')!.addEventListener('click', async () => {
@@ -267,8 +319,110 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
     evalbar.classList.toggle('black', color === 'black');
   }
 
+  /** Add your own line: play both sides on the board, Stockfish checks your moves, save it. */
+  function editLine(r: Repertoire, startMoves: string[]) {
+    board?.destroy();
+    board = null;
+    view.innerHTML = header(`
+      <div class="trainer rep">
+        <div class="board-col">
+          <div class="board-wrap"><div class="evalbar" aria-hidden="true"><i></i><span></span></div><div id="board"></div></div>
+        </div>
+        <aside class="coach-col">
+          <div class="card rep-edit">
+            <h2>➕ Save a new line</h2>
+            <p class="sub">Play the moves for <b>both sides</b> on the board. Stockfish checks each of your moves.</p>
+            <p class="edit-moves" aria-live="polite"></p>
+            <p class="edit-eval" aria-live="polite"></p>
+            <label class="edit-name">Name <input id="line-name" maxlength="80" placeholder="e.g. My answer to the Sicilian" /></label>
+            <div class="rep-actions">
+              <button class="btn small" data-undo>↶ Undo</button>
+              <button class="btn small ghost" data-clear>⟲ Start from move 1</button>
+            </div>
+            <div class="rep-actions">
+              <button class="btn primary" data-save disabled>💾 Save line</button>
+              <button class="btn ghost" data-cancel>Cancel</button>
+            </div>
+          </div>
+        </aside>
+      </div>`);
+    const START = r.root.fen;
+    const moves: string[] = [];
+    const evals = new Map<string, EngineLine | null>();
+    const myTurn = color === 'white' ? 'w' : 'b';
+    const evalbar = $(view, '.evalbar');
+    evalbar.classList.toggle('black', color === 'black');
+    const nameInput = $(view, '#line-name') as HTMLInputElement;
+    let named = false;
+    nameInput.addEventListener('input', () => (named = true));
+    let token = 0;
+    const evalOf = async (fen: string) => {
+      if (!evals.has(fen)) evals.set(fen, (await getEngine().search(fen, { depth: 12, multipv: 1 }).catch(() => null))?.lines[0] ?? null);
+      return evals.get(fen) ?? null;
+    };
+    const render = async () => {
+      const b = board!;
+      const sans = b.chess.history();
+      const text = sans.map((x, i) => (i % 2 ? x : `${i / 2 + 1}.${x}`)).join(' ');
+      $(view, '.edit-moves').innerHTML = sans.length ? `<b>${esc(text)}</b>` : '<span class="sub">No moves yet — make the first move.</span>';
+      if (!named) nameInput.value = sans.length ? `My line: ${sans.slice(0, 6).map((x, i) => (i % 2 ? x : `${i / 2 + 1}.${x}`)).join(' ')}` : '';
+      const mineCount = moves.filter((_, i) => (i % 2 === 0) === (color === 'white')).length;
+      ($(view, '[data-save]') as HTMLButtonElement).disabled = mineCount === 0;
+      const out = $(view, '.edit-eval');
+      if (!moves.length) return void (out.textContent = '');
+      // Was the last move one of yours? Then compare it with Stockfish's best.
+      const my = ++token;
+      const hist = b.chess.history({ verbose: true });
+      const last = hist[hist.length - 1];
+      const fenBefore = last.before;
+      out.innerHTML = '<span class="sub">🕵️ Stockfish is checking…</span>';
+      const [before, after] = await Promise.all([evalOf(fenBefore), evalOf(b.chess.fen())]);
+      if (my !== token || destroyed || !before || !after) return;
+      const mover = flip(after); // the mover's point of view
+      const pov = last.color === myTurn ? mover : after; // always show YOUR side
+      (evalbar.querySelector('i') as HTMLElement).style.height = `${winPercent(pov)}%`;
+      const loss = winPercent(before) - winPercent(mover);
+      const bestSan = before.uci[0] && before.uci[0] !== last.lan ? describeMove(fenBefore, before.uci[0]).san : '';
+      if (last.color !== myTurn) out.innerHTML = `Their move <b>${esc(last.san)}</b>. Now it's your move. <span class="sub">(${esc(evalWords(pov))})</span>`;
+      else if (loss > 10 && bestSan) out.innerHTML = `⚠️ <b>${esc(last.san)}</b> gives away about ${Math.round(loss)}% winning chances. Stockfish prefers <b>${esc(bestSan)}</b>. You can undo, or keep it if you like it.`;
+      else if (loss > 3 && bestSan) out.innerHTML = `👍 <b>${esc(last.san)}</b> is playable. Stockfish slightly prefers <b>${esc(bestSan)}</b>. <span class="sub">(${esc(evalWords(pov))})</span>`;
+      else out.innerHTML = `✅ <b>${esc(last.san)}</b> is a good move. <span class="sub">(${esc(evalWords(pov))})</span>`;
+    };
+    const onMove = (uci: string) => {
+      if (!board || moves.length >= 40) return;
+      if (board.play(uci)) {
+        moves.push(board.chess.history({ verbose: true }).slice(-1)[0].lan);
+        render();
+      }
+    };
+    board = new Board($(view, '#board'), { fen: START, orientation: color, onMove });
+    for (const u of startMoves) if (board.play(u)) moves.push(u);
+    render();
+    (window as any).__repEdit = () => ({ moves: [...moves] });
+    $(view, '[data-undo]').addEventListener('click', () => {
+      if (!board || !moves.length) return;
+      board.undo();
+      moves.pop();
+      render();
+    });
+    $(view, '[data-clear]').addEventListener('click', () => {
+      if (!board) return;
+      board.setPosition(START);
+      moves.length = 0;
+      render();
+    });
+    $(view, '[data-cancel]').addEventListener('click', () => renderBrowse(r));
+    $(view, '[data-save]').addEventListener('click', async () => {
+      if (!app.progress || !moves.length) return;
+      const id = saveMyLine(app.progress, color, nameInput.value, moves);
+      await app.saveProgress();
+      toast('📌 Line saved in your profile.', 'win');
+      renderBrowse(r, id);
+    });
+  }
+
   function renderPractice(r: Repertoire) {
-    const lines = shuffle(allLines(r));
+    const lines = shuffle([...savedLines(color).map((x) => x.line), ...allLines(r)]);
     let li = 0;
     let k = 0;
     let firstTry = true;
@@ -289,26 +443,28 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
       </div>`);
     $(view, '.voice-slot').append(voiceControl());
     const feed = $(view, '.feed');
-    const say = (html: string, cls = 'coach') => {
+    /** Only messages with a short spoken summary get ▶ Listen (and auto-read). */
+    const say = (html: string, cls = 'coach', brief = '') => {
       const d = document.createElement('div');
       d.className = `msg ${cls}`;
       d.innerHTML = html;
+      const b = brief ? listenButton(brief) : null;
+      if (b) d.append(b);
       feed.append(d);
       feed.scrollTop = feed.scrollHeight;
-      speak(d.textContent ?? '');
     };
     board = new Board($(view, '#board'), { fen: r.root.fen, orientation: color, onMove: onMove });
     const progress = () => ($(view, '.rep-progress').textContent = `Line ${li + 1} of ${lines.length} · ${correct}/${total} first-try moves`);
 
     // Hook for the automated browser test (tests/repertoire.mjs).
-    (window as any).__rep = () => ({ expected: lines[li]?.[k]?.uci ?? null, interactive: !!lines[li]?.[k] && !['reply', 'engine-reply'].includes(lines[li][k].kind), li, k });
+    (window as any).__rep = () => ({ expected: lines[li]?.[k]?.uci ?? null, interactive: !!lines[li]?.[k] && !isReply(lines[li][k].kind), li, k });
     function step() {
       if (destroyed || !board) return;
       const line = lines[li];
       const m = line[k];
       progress();
       if (!m) return lineDone();
-      const theirs = m.kind === 'reply' || m.kind === 'engine-reply';
+      const theirs = isReply(m.kind);
       if (theirs) {
         board.setInteractive(false);
         setTimeout(() => {
@@ -335,7 +491,11 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
         if (firstTry) correct++;
         const before = k ? lines[li][k - 1].fen : r.root.fen;
         const mine = getNote(app.progress, noteKey(color, before, m.uci)).trim();
-        say(`<p>✅ <b>${esc(m.san)}</b> — ${m.kind === 'yours' ? 'your move, well remembered!' : m.kind === 'upgrade' ? 'the upgrade — great!' : 'right, the prepared move.'}</p>${mine ? `<p class="your-note">📝 Your note: ${esc(mine)}</p>` : ''}`, 'good');
+        say(
+          `<p>✅ <b>${esc(m.san)}</b> — ${m.kind === 'yours' ? 'your move, well remembered!' : m.kind === 'upgrade' ? 'the upgrade — great!' : m.kind === 'saved' ? 'your own line, well remembered!' : 'right, the prepared move.'}</p>${mine ? `<p class="your-note">📝 Your note: ${esc(mine)}</p>` : ''}`,
+          'good',
+          m.evalLine?.uci[0] === m.uci ? `Right. ${moveBrief(before, m.evalLine, 'good')}` : '',
+        );
         k++;
         step();
       } else {
@@ -344,7 +504,11 @@ export function renderRepertoire(view: HTMLElement, params: URLSearchParams) {
         const before = k ? lines[li][k - 1].fen : r.root.fen;
         const why = describeMove(before, m.uci, 'you', m.evalLine?.uci ?? []).facts[0] ?? '';
         board.shapes([board.arrow(m.uci.slice(0, 2), m.uci.slice(2, 4), 'green')]);
-        say(`<p>Not this one. In your repertoire the move is <b>${esc(m.san)}</b>. ${md(why)}</p><p class="sub">Play it on the board to continue.</p>`, 'alt');
+        say(
+          `<p>Not this one. In your repertoire the move is <b>${esc(m.san)}</b>. ${md(why)}</p><p class="sub">Play it on the board to continue.</p>`,
+          'alt',
+          `Not this one. In your repertoire the move is ${m.san}: ${why.replace(/\*\*/g, '').replace(/^It\b/, 'it')}`,
+        );
       }
     }
 
