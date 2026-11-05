@@ -295,15 +295,16 @@ export function voiceControl(): HTMLElement {
     const list = voices();
     const st = naturalStatus();
     const natural = settings.engine !== 'device';
+    // Quiet mode needs no extra line (space next to the board is precious on iPads).
     const status = !settings.auto
-      ? '<span class="sub v-status">Quiet. Tap ▶ Listen for a short summary.</span>'
+      ? ''
       : natural && st.downloading !== null
         ? `<span class="sub v-status">⬇ Preparing natural voice… ${st.downloading}% (one time, ≈60 MB)</span>`
         : natural && st.failed
           ? '<span class="sub v-status">Natural voice unavailable here — using your device voice.</span>'
-          : '<span class="sub v-status">Reads a short summary after each move.</span>';
+          : '';
     wrap.innerHTML = `
-      <button class="btn small ${settings.auto ? 'primary' : ''}" data-v="toggle" aria-pressed="${settings.auto}">
+      <button class="btn small ${settings.auto ? 'primary' : ''}" data-v="toggle" aria-pressed="${settings.auto}" title="${settings.auto ? 'A short summary is read after each move' : 'Quiet: tap ▶ Listen to hear a short summary'}">
         ${settings.auto ? '🔊 Auto-read on' : '🔇 Auto-read off'}
       </button>
       ${status}

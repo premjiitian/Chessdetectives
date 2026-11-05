@@ -13,8 +13,8 @@ describe('spoken summary (moveBrief)', () => {
     const b = moveBrief(START, { uci: ['e2e4', 'e7e5', 'g1f3', 'b8c6'], cp: 30, mate: null }, 'good');
     expect(b).toMatch(/^e4 works: /);
     expect(b).toMatch(/Their best answer is e5/);
-    expect(b).toMatch(/Your plan: Nf3 next/);
-    expect(b).toMatch(/Their plan: Nc6, it deals with your threat Nxe5, which would win their pawn/);
+    expect(b).toMatch(/Your plan: Nf3 next\. It develops your knight\./);
+    expect(b).toMatch(/Their plan: Nc6\. It deals with your threat Nxe5, which would win their pawn\./);
     expect(words(b)).toBeLessThanOrEqual(60);
   });
 
@@ -27,6 +27,12 @@ describe('spoken summary (moveBrief)', () => {
     expect(b).toContain(`Your plan: ${hint}`);
     expect(b).not.toMatch(/Nc6|Nf6/); // never gives the answer away
     expect(words(b)).toBeLessThanOrEqual(60);
+  });
+
+  it('no filler: a calm move gets no empty reason', () => {
+    // 1.Nf3 Nf6 2.g3: quiet moves; their reasons are generic and must not be read out.
+    const b = moveBrief(START, { uci: ['g1f3', 'g8f6', 'g2g3', 'g7g6'], cp: 20, mate: null }, 'good');
+    expect(b).not.toMatch(/calm, useful move|quiet move that keeps/);
   });
 
   it('an okay move says there is something stronger', () => {

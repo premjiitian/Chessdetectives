@@ -138,8 +138,8 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     feed.scrollTop = feed.scrollHeight;
     return div;
   };
-  /** Your plan after a wrong move: the first hint, so the answer stays hidden. */
-  const planHint = () => (hintSteps[0]?.text ?? info().hint).replace(/\*\*/g, '').replace(/^\w/, (x) => x.toLowerCase());
+  /** Your plan after a wrong move: the theme hint (e.g. "Look at what your opponent could capture next"), so the answer stays hidden. */
+  const planHint = () => (hintSteps[1]?.text ?? info().hint).replace(/\*\*/g, '').replace(/^\w/, (x) => x.toLowerCase());
   const info = () => THEMES[m.theme];
   const paras = (lines: string[]) => lines.map((l) => `<p>${md(l)}</p>`).join('');
 
@@ -272,10 +272,16 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       if (playedLine && winPercent(lines[0]) - winPercent(playedLine) <= ACCEPT) {
         solved = true;
         board?.setInteractive(false);
-        say('<p>🔎 On a deeper look, your game move was actually fine — the quick scan was too strict. Case dismissed!</p>', 'good');
         app.dismissMistake(m.id);
         btnHint.hidden = btnSol.hidden = true;
         btnNext.hidden = false;
+        if (index + 1 < queue.length) {
+          // Not a real puzzle: go straight on to the next case.
+          say('<p>🔎 On a deeper look, your game move was actually fine — case dismissed! On to the next one…</p>', 'good');
+          setTimeout(() => !destroyed && thisCase === m && load(index + 1), 1500);
+        } else {
+          say('<p>🔎 On a deeper look, your game move was actually fine — the quick scan was too strict. Case dismissed!</p>', 'good');
+        }
       }
     });
   }

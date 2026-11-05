@@ -480,56 +480,68 @@ export function coachView(fen: string, chosenUci: string, lines: EngineLine[]): 
 
 export type BriefVerdict = 'good' | 'okay' | 'wrong';
 
-/** First fact, shortened to one plain sentence that follows "X: ...". */
+/** First fact as one short sentence ("It wins the queen."), or '' when it says nothing concrete. */
 function gist(facts: string[]): string {
   const f = (facts[0] ?? '').replace(/\*\*/g, '').split(/(?<=[.!])\s/)[0].replace(/\s+—.*$/, '.').trim();
-  return f.replace(/^It\b/, 'it').replace(/^It's\b/, "it's");
+  if (/calm, useful move|quiet move that keeps|improves (your|their) \w+ and gives/.test(f)) return '';
+  return f;
 }
+const lower = (t: string) => t.replace(/^It\b/, 'it').replace(/^It's\b/, "it's");
 
 /**
  * fen: position before the move; line: from the mover's side, line.uci[0] is
  * the move, then the opponent's best answer, your follow-up, their follow-up.
  * For a wrong move pass `myPlan` (a hint) so the best move is not given away.
+ * At most ~55 words: the plan reasons are dropped first when it runs long.
  */
 export function moveBrief(fen: string, line: Pick<EngineLine, 'uci' | 'cp' | 'mate'>, verdict: BriefVerdict, myPlan?: string): string {
   const c = new Chess(fen);
   const ucis = line.uci;
   const mv = ucis[0] ? play(c, ucis[0]) : null;
   if (!mv) return '';
-  const out: string[] = [];
-  const mine = describeMove(fen, ucis[0], 'you', ucis);
-  if (verdict === 'good') out.push(`${mv.san} works: ${gist(mine.facts)}`);
-  else if (verdict === 'okay') out.push(`${mv.san} is playable, but there is a stronger move.`);
-  else out.push(`${mv.san} is a mistake.`);
+  const head: string[] = [];
+  const mine = gist(describeMove(fen, ucis[0], 'you', ucis).facts);
+  if (verdict === 'good') head.push(mine ? `${mv.san} works: ${lower(mine)}` : `${mv.san} is a good move.`);
+  else if (verdict === 'okay') head.push(`${mv.san} is playable, but there is a stronger move.`);
+  else head.push(`${mv.san} is a mistake.`);
 
   // The opponent's best answer.
   const afterMine = c.fen();
   const reply = ucis[1] ? play(c, ucis[1]) : null;
   if (reply) {
     const oppMate = verdict === 'wrong' && line.mate !== null && line.mate < 0;
-    const r = describeMove(afterMine, ucis[1], 'opponent');
+    const r = gist(describeMove(afterMine, ucis[1], 'opponent').facts);
     const lost = verdict === 'wrong' ? materialSwing(afterMine, ucis.slice(1), reply.color as Side, 8) : 0;
-    out.push(
+    head.push(
       oppMate
         ? `Their best answer is ${reply.san}, with a forced checkmate.`
-        : `Their best answer is ${reply.san}: ${gist(r.facts)}${lost >= 2 ? ` You lose about ${lost} points.` : ''}`,
+        : `Their best answer is ${reply.san}${r ? `: ${lower(r)}` : '.'}${lost >= 2 ? ` You lose about ${lost} points.` : ''}`,
     );
   }
-  // Your plan, then theirs (Stockfish's main line).
+  // Your plan, then theirs (Stockfish's main line), each with an optional reason.
+  const plans: { text: string; why: string }[] = [];
   const afterReply = c.fen();
-  const next = verdict !== 'wrong' && ucis[2] ? play(c, ucis[2]) : null;
-  if (verdict === 'wrong') out.push(`Your plan: ${myPlan ?? 'look again for a move that keeps your position safe.'}`);
-  else if (next) out.push(`Your plan: ${next.san} next, ${gist(describeMove(afterReply, ucis[2], 'you', ucis.slice(2)).facts).replace(/\.$/, '')}.`);
-  if (verdict !== 'wrong' && next && ucis[3]) {
-    const fenNow = c.fen();
-    const t = play(c, ucis[3]);
-    if (t) out.push(`Their plan: ${t.san}, ${gist(describeMove(fenNow, ucis[3], 'opponent').facts).replace(/\.$/, '')}.`);
-  } else if (verdict === 'wrong' && reply && ucis[3]) {
-    // After their best answer and your most stubborn defence, what comes next.
-    const c2 = new Chess(afterReply);
-    const def = play(c2, ucis[2]);
-    const t = def ? play(c2, ucis[3]) : null;
-    if (t) out.push(`Their plan: follow up with ${t.san}.`);
+  if (verdict === 'wrong') {
+    plans.push({ text: `Your plan: ${myPlan ?? 'look again for a move that keeps your position safe.'}`, why: '' });
+    if (reply && ucis[3]) {
+      const c2 = new Chess(afterReply);
+      const t = play(c2, ucis[2]) ? play(c2, ucis[3]) : null;
+      if (t) plans.push({ text: `Their plan: ${t.san} next.`, why: '' });
+    }
+  } else {
+    const next = ucis[2] ? play(c, ucis[2]) : null;
+    if (next) {
+      plans.push({ text: `Your plan: ${next.san} next.`, why: gist(describeMove(afterReply, ucis[2], 'you', ucis.slice(2)).facts) });
+      const fenNow = c.fen();
+      const t = ucis[3] ? play(c, ucis[3]) : null;
+      if (t) plans.push({ text: `Their plan: ${t.san}.`, why: gist(describeMove(fenNow, ucis[3], 'opponent').facts) });
+    }
   }
-  return out.join(' ').replace(/\s+/g, ' ').trim();
+  const build = (keep: number) =>
+    [...head, ...plans.map((p, i) => (i < keep && p.why ? `${p.text} ${p.why}` : p.text))].join(' ').replace(/\s+/g, ' ').trim();
+  for (let keep = plans.length; keep >= 0; keep--) {
+    const out = build(keep);
+    if (out.split(' ').length <= 55 || keep === 0) return out;
+  }
+  return build(0);
 }

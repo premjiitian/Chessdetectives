@@ -220,7 +220,8 @@ const connect = async (page, name) => {
   await page.waitForTimeout(500);
   await page.goto(`http://localhost:${port}/#/train`);
   st = await until((s) => s.interactive, 60000);
-  check('trainer recovers after navigating away and back', !!st);
+  const why = st ? '' : JSON.stringify({ step: await step().catch((e) => e.message.slice(0, 80)), feed: (await page.$eval('.feed', (e) => e.innerText).catch(() => 'no feed')).slice(-200) });
+  check('trainer recovers after navigating away and back', !!st, why);
   check('no page errors during puzzle flows', page.errors.length === 0, page.errors.join(' | '));
 
   // f) phone layout with the voice controls
