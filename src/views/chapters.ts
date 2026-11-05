@@ -2,6 +2,7 @@
 // positions taken from YOUR games.
 
 import { app } from '../lib/app';
+import { isNativeApp, openExternal } from '../lib/native';
 import { CHANNEL_URL, CHAPTERS, PARTS, PLAYLIST_ID, PLAYLIST_TITLE, PLAYLIST_URL, chapterByEp, practiceFor, recommendChapter, thumb, type Chapter } from '../lib/chapters';
 import { THEMES } from '../lib/themes';
 import { BADGES, checkBadges } from '../lib/training';
@@ -149,6 +150,8 @@ function renderChapter(view: HTMLElement, ep: number) {
     view.querySelectorAll<HTMLElement>('.mini-host').forEach((h) => boards.push(miniBoard(h, h.dataset.fen!, h.dataset.or as 'white' | 'black')));
     // Load the YouTube player only when asked (faster, and no tracking before you press play).
     view.querySelector('.video-poster')!.addEventListener('click', () => {
+      // In the iOS app YouTube refuses embedded players without a web address, so play it in the in-app browser.
+      if (isNativeApp()) return void openExternal(`https://www.youtube.com/watch?v=${c.videoId}&list=${PLAYLIST_ID}`);
       const host = view.querySelector('[data-video]')!;
       host.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${c.videoId}?autoplay=1&rel=0&list=${PLAYLIST_ID}" title="${esc(c.title)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
     });

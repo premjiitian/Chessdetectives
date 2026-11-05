@@ -12,9 +12,15 @@
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "node tests/e2e.mjs",
-    "loop": "node scripts/loop.mjs"
+    "loop": "node scripts/loop.mjs",
+    "build:selftest": "npm run engine && VITE_SELFTEST=1 vite build --outDir dist-selftest",
+    "ios:sync": "npm run build && npx cap sync ios",
+    "ios:open": "npx cap open ios"
   },
   "dependencies": {
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0",
     "@diffusionstudio/vits-web": "^1.0.3",
     "@lichess-org/chessground": "10.5.0",
     "chess.js": "1.4.0",
@@ -22,6 +28,7 @@
     "stockfish": "19.0.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.6.0",
     "axe-core": "^4.14.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.7",
