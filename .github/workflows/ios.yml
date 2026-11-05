@@ -31,7 +31,9 @@ jobs:
         run: |
           npm run engine
           npx tsc --noEmit
-          VITE_SELFTEST=1 npx vite build
+          # The chess.com account the self-test (and the screenshots) use: repository
+          # variable DEMO_CHESS_USER (Settings → Secrets and variables → Actions → Variables).
+          VITE_SELFTEST=1 VITE_SELFTEST_USER="${{ vars.DEMO_CHESS_USER || 'erik' }}" npx vite build
           npx cap sync ios
       - name: Build the app for the simulator
         run: |

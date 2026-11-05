@@ -29,6 +29,6 @@ Just type your chess.com username to start. Chess Detectives is not affiliated w
 **Privacy policy URL**: https://premjiitian.github.io/Chessdetectives/privacy.html
 
 **Notes for the reviewer**:
-No account needed. On the first screen type the chess.com username `erik` (a public account) and tap Start;
+No account needed. On the first screen type the chess.com username `DEMO_ACCOUNT` (our public demo account — owner fills in the name) and tap Start;
 puzzles appear after the games are analysed (about 20 seconds). Stockfish runs on the device.
 Video lessons open in the in-app browser.

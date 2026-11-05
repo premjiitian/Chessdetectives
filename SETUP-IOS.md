@@ -6,6 +6,15 @@ on every change (Actions → **iOS app**), so **you don't need a Mac**.
 
 What only you can do (Apple needs the account owner):
 
+## 0. Your choices (5 Nov 2026)
+- Apple Developer account: **Individual, already enrolled** → skip step 1, just look up your Team ID.
+- Progress in the app: **stays on the device** (no sign-in in the app for now).
+- Store screenshots and reviewer: a **kid-friendly demo chess.com account**. When you have it:
+  GitHub → Settings → Secrets and variables → Actions → **Variables** → New variable
+  `DEMO_CHESS_USER` = the username. The next "iOS app" run makes the screenshots with it,
+  and put the same name in `docs/app-store.md` (reviewer notes).
+- Privacy contact: prem.jiitian@gmail.com.
+
 ## 1. Join the Apple Developer Program (once, 99 USD / year)
 1. Go to <https://developer.apple.com/programs/enroll/> and sign in with your Apple ID.
 2. Enrol as an **Individual** (your name is shown as the seller) or an **Organization**
