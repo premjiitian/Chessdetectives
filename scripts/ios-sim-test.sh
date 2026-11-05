@@ -25,6 +25,10 @@ echo "== $NAME ($UDID)"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b
 xcrun simctl install "$UDID" "$APP"
+# Where the installed app's web files live: the screenshot handshake file goes there.
+APPDIR=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" app)
+ACK="$APPDIR/public/shot-ack.txt"
+: > "$ACK"
 # The first screenshot after boot takes ~30 s; take a throw-away one now so
 # the real ones happen while the app still shows the screen it asked for.
 xcrun simctl io "$UDID" screenshot "$OUT/.warmup.png" >/dev/null 2>&1; rm -f "$OUT/.warmup.png"
@@ -47,7 +51,9 @@ while [ $SECONDS -lt $deadline ]; do
         *CD-CHECK*) echo "${line#*CD-CHECK }" ;;
         *CD-SHOT*)
           shot=$(echo "${line#*CD-SHOT }" | tr -cd 'a-z0-9-')
-          xcrun simctl io "$UDID" screenshot "$OUT/$shot.png" >/dev/null 2>&1 && echo "  📸 $shot" ;;
+          # Take it, then tell the app (it waits for this before moving on).
+          if xcrun simctl io "$UDID" screenshot "$OUT/$shot.png" >/dev/null 2>&1; then echo "  📸 $shot"; else echo "  ⚠️ screenshot $shot failed"; fi
+          echo "$shot" >> "$ACK" ;;
         *CD-SELFTEST*) echo "$line" ;;
       esac
     done

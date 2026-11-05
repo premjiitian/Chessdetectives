@@ -36,6 +36,8 @@ await ctx.addInitScript((user) => {
   window.__opened = [];
   localStorage.setItem('voice-settings', JSON.stringify({ engine: 'device' }));
 }, USER);
+// The simulator script confirms each screenshot via shot-ack.txt; here: confirm all at once.
+await ctx.route(/shot-ack\.txt/, (r) => r.fulfill({ contentType: 'text/plain', body: 'welcome dashboard puzzle repertoire chapters' }));
 await page.route('https://images.chesscomfiles.com/**', (r) => r.fulfill({ status: 404 }));
 await page.route('https://www.youtube-nocookie.com/**', (r) => r.fulfill({ contentType: 'text/html', body: 'player' }));
 await page.route('https://api.chess.com/**', (route) => {

@@ -39,10 +39,20 @@ export async function runSelfTest() {
       console.log(`CD-CHECK ${name} FAIL ${(e as Error).message}`);
     }
   };
+  // Screenshot handshake: announce, then wait until the CI script has taken
+  // it (it writes the name into shot-ack.txt inside the app). Screenshots on
+  // CI Macs take 1–30 s, so a fixed wait would capture the wrong screen.
   const shot = async (name: string) => {
     await sleep(1500);
     console.log(`CD-SHOT ${name}`);
-    await sleep(5000); // time for the screenshot (the CI script takes it now)
+    const end = Date.now() + 90000;
+    while (Date.now() < end) {
+      const ack = await fetch(`shot-ack.txt?t=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
+      if (ack.split(/\s+/).includes(name)) return;
+      await sleep(500);
+    }
+    results.push(false); // a missing screenshot fails the run
+    console.log(`CD-CHECK screenshot-${name} FAIL no screenshot taken within 90 s`);
   };
   const user = import.meta.env.VITE_SELFTEST_USER || 'erik';
   await sleep(1500);
