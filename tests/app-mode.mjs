@@ -78,7 +78,11 @@ await page.waitForTimeout(300);
 const opened2 = await page.evaluate(() => window.__opened);
 check('chess.com game links open in the in-app browser', opened2.some((u) => /chess\.com\/game/.test(u)), opened2.slice(-1)[0]);
 check('the app stays on its own page', /localhost/.test(page.url()));
-check('safe areas: content respects the notch', await page.evaluate(() => /safe-area-inset/.test([...document.styleSheets].flatMap((s) => { try { return [...s.cssRules].map((r) => r.cssText); } catch { return []; } }).join(' '))));
+// A phone with a notch: the header must move below it (safe areas set through --safe-*).
+await page.evaluate(() => { location.hash = '#/dashboard'; document.documentElement.style.setProperty('--safe-top', '47px'); document.documentElement.style.setProperty('--safe-bottom', '34px'); });
+await page.waitForSelector('.topbar');
+const padTop = await page.$eval('.topbar', (e) => parseFloat(getComputedStyle(e).paddingTop));
+check('header stays below the notch on iPhones (47 px safe area)', padTop >= 47, `padding-top ${padTop}px`);
 check('no page errors', errors.length === 0, errors.join(' | '));
 
 console.log(`\n${results.filter(Boolean).length}/${results.length} checks passed`);

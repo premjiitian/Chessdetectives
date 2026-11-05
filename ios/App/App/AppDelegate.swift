@@ -10,6 +10,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Professor Pin should be heard when you tap ▶ Listen, even with the
         // silent switch on; mixing keeps the player's own music playing.
+        #if DEBUG
+        // Test builds: send the app's log lines out immediately (the simulator
+        // test takes screenshots when the app says so — late lines = wrong screen).
+        setvbuf(stdout, nil, _IONBF, 0)
+        #endif
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
         return true
     }

@@ -1,5 +1,10 @@
 /* Chess Detectives — board colours taken from the reference snapshot. */
 :root {
+  /* Notch / home bar / rounded corners (iPhone app and home-screen app). Tests can override these. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   --sq-light: #f3f6fb;
   --sq-dark: #6595ea;
   --accent: #3f74e0;
@@ -447,8 +452,8 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
   .who .uname { display: none; }
 }
 /* Home-screen app mode: keep clear of the status bar and rounded corners. */
-.topbar { padding-top: max(10px, env(safe-area-inset-top)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
-.foot { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.topbar { padding-top: max(10px, var(--safe-top)); padding-left: max(24px, var(--safe-left)); padding-right: max(24px, var(--safe-right)); }
+.foot { padding-bottom: max(24px, var(--safe-bottom)); }
 /* Safari zooms into any text box smaller than 16px — keep inputs at 16px+. */
 input:not([type=checkbox]), select, textarea { font-size: max(16px, 1em); }
 .connect input:not([type=checkbox]) { font-size: 17px; }
@@ -581,7 +586,7 @@ section.card { margin-bottom: 16px; }
   .coach-col .controls .btn { flex: 1; }
   .board-col { position: static; }
   .hero { grid-template-columns: 1fr; gap: 28px; }
-  .topbar { flex-wrap: wrap; padding: 8px 16px; gap: 8px; }
+  .topbar { flex-wrap: wrap; padding: max(8px, var(--safe-top)) max(16px, var(--safe-right)) 8px max(16px, var(--safe-left)); gap: 8px; }
   .topbar nav { order: 3; flex-basis: 100%; overflow-x: auto; }
   /* Phone menu: icon with a small word under it, so nothing is a guess. */
   .topbar nav { gap: 2px; }

@@ -55,6 +55,18 @@ export async function runSelfTest() {
     if (!(await until(() => !!document.querySelector('.hero, .topbar'), 10000))) throw new Error('no welcome screen');
     return 'shown';
   });
+  await check('notch-safe-area', async () => {
+    // Measure the device's real notch area, then check the header keeps clear of it.
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:0;height:0;padding-top:env(safe-area-inset-top)';
+    document.body.append(probe);
+    const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    probe.remove();
+    const pad = parseFloat(getComputedStyle(document.querySelector('.topbar') ?? document.body).paddingTop) || 0;
+    const hero = document.querySelector('.hero')?.getBoundingClientRect().top ?? inset;
+    if (document.querySelector('.topbar') ? pad < inset : hero < inset) throw new Error(`notch ${inset}px but content starts at ${document.querySelector('.topbar') ? pad : hero}px`);
+    return `notch ${inset}px, clear`;
+  });
   await shot('welcome');
   await check('stockfish', async () => {
     const t = Date.now();
@@ -98,6 +110,16 @@ export async function runSelfTest() {
     const done = await until(() => /games analyzed/.test(document.querySelector('.status')?.textContent ?? '') && !document.querySelector('.status .spin'), 420000);
     if (!done) throw new Error(`still: ${document.querySelector('.status')?.textContent?.slice(0, 80)}`);
     return document.querySelector('.status')?.textContent?.trim().slice(0, 60) ?? '';
+  });
+  await check('header-below-notch', async () => {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:0;height:0;padding-top:env(safe-area-inset-top)';
+    document.body.append(probe);
+    const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+    probe.remove();
+    const brand = document.querySelector('.topbar .brand, .topbar nav')?.getBoundingClientRect().top ?? 0;
+    if (brand < inset) throw new Error(`header at ${Math.round(brand)}px is under the notch (${inset}px)`);
+    return `header at ${Math.round(brand)}px, notch ${inset}px`;
   });
   await shot('dashboard');
   const visit = async (route: string, sel: string, wait = 30000) => {
