@@ -427,7 +427,8 @@ select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid
 
 /* ---------- coach panel: buttons always in view on wide screens ---------- */
 @media (min-width: 821px) {
-  .trainer .coach-col { position: sticky; top: 76px; max-height: calc(100vh - 92px); display: flex; flex-direction: column; gap: 12px; }
+  /* The column starts ~104px down before scrolling (76px once sticky): size it for the lower start. */
+  .trainer .coach-col { position: sticky; top: 76px; max-height: calc(100vh - 120px); display: flex; flex-direction: column; gap: 12px; }
   .trainer .coach-col > * { flex: none; }
   .trainer .coach-col > .feed { flex: 1 1 auto; min-height: 140px; max-height: none; overflow-y: auto; }
   .trainer.rep .coach-col { position: static; max-height: none; display: grid; }
