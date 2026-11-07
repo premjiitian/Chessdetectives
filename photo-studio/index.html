@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Privacy by design: the page may only talk to itself. No uploads are possible. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Private Photo Studio</title>
+  <meta name="description" content="Auto-edit your photos on your own device. Nothing is uploaded." />
+  <meta name="theme-color" content="#14161a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Photo Studio" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icon-180.png" />
+</head>
+<body>
+  <a class="skip" href="#main">Skip to editor</a>
+  <header class="top">
+    <h1><img src="./icon.svg" alt="" width="24" height="24" /> Photo Studio</h1>
+    <p class="promise" id="promise">🔒 Private: your photos are edited on this device and never uploaded.</p>
+  </header>
+  <main id="main" tabindex="-1"></main>
+  <div class="status" role="status" aria-live="polite" id="status"></div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>
