@@ -140,13 +140,14 @@ export function renderPlay(view: HTMLElement, params: URLSearchParams) {
     stopVoice(); // a new move replaces the previous comment
     feed.querySelectorAll('.msg:not(.old)').forEach((el) => el.classList.add('old'));
     const fenBefore = board.chess.fen();
-    const before = lastEval ?? (await evaluate(fenBefore));
+    // Apply the move first (the piece stays where you put it), then think.
     const san = board.play(uci);
     if (!san) return;
     sans.push(san);
     renderMoves();
     thinking = true;
     board.setInteractive(false);
+    const before = lastEval ?? (await evaluate(fenBefore));
     board.shapes([]);
 
     const after = await evaluate(board.chess.fen());

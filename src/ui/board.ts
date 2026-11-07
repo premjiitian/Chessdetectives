@@ -37,6 +37,13 @@ export class Board {
       movable: { free: false, showDests: true, events: { after: (o, d) => this.userMoved(o, d) } },
     });
     this.sync();
+    // For the automated checks: is what you SEE the same as the real position?
+    (window as any).__cdBoard = this;
+  }
+
+  /** True when the pieces on screen match the position the app is using. */
+  inSync(): boolean {
+    return this.cg.getFen() === this.chess.fen().split(' ')[0];
   }
 
   private userMoved(orig: Key, dest: Key) {
@@ -44,6 +51,12 @@ export class Board {
     const promo = piece?.type === 'p' && (dest[1] === '8' || dest[1] === '1') ? 'q' : '';
     const uci = orig + dest + promo;
     this.onMove?.(uci);
+    // Safety net: a screen that ignores a move must not leave a "ghost" piece
+    // on the board (what you see would differ from the real position, and the
+    // next moves would fail). Snap back to the real position.
+    setTimeout(() => {
+      if (!this.inSync()) this.sync();
+    }, 0);
   }
 
   /** Re-reads the chess.js position into the board. */

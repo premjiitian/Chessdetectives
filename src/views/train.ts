@@ -294,27 +294,37 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     stopVoice();
     feed.querySelectorAll('.msg:not(.old)').forEach((el) => el.classList.add('old'));
     busy = true;
-    board.setInteractive(false);
     board.shapes([]);
     const fen = stepFen;
-    const lines = await top;
-    if (destroyed || my !== attempt) return;
-    const best = lines[0];
-    if (!best) {
-      busy = false;
-      board.setInteractive(true);
-      return;
-    }
-    // Use the engine's promotion piece if you pushed to the same square.
-    const same = lines.find((l) => l.uci[0]?.slice(0, 4) === uci.slice(0, 4));
-    if (same) uci = same.uci[0];
-    const san = board.play(uci);
+    // Keep the piece where the player put it while Stockfish judges the move.
+    // (Locking the board first redrew the old position: the piece jumped back
+    // for a second, so kids thought the move failed and tried again.)
+    let san = board.play(uci);
+    board.setInteractive(false);
     if (!san) {
       busy = false;
       board.setInteractive(true);
       return;
     }
     say(`<p>${esc(san)}</p>`, 'you');
+    // Instant reaction, so the wait for Stockfish never looks like a frozen app.
+    const checking = say('<p class="checking"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> Professor Pin is checking your move…</p>', 'coach');
+    const lines = await top;
+    if (destroyed || my !== attempt) return;
+    const best = lines[0];
+    if (!best) {
+      busy = false;
+      board.setPosition(fen, lastMove);
+      board.setInteractive(true);
+      return;
+    }
+    // Use the engine's promotion piece if you pushed to the same square.
+    const same = lines.find((l) => l.uci[0]?.slice(0, 4) === uci.slice(0, 4));
+    if (same && same.uci[0] !== uci) {
+      board.setPosition(fen, lastMove);
+      uci = same.uci[0];
+      san = board.play(uci) ?? san;
+    }
 
     let line = lines.find((l) => l.uci[0] === uci);
     let reply: EngineLine | undefined;
@@ -324,6 +334,7 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
       reply = after[0];
       line = reply ? { ...flip(reply), uci: [uci, ...reply.uci] } : undefined;
     }
+    checking.remove();
     const bestWin = winPercent(best);
     const myWin = line ? winPercent(line) : 0;
     const gap = bestWin - myWin;
@@ -444,7 +455,10 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
   });
 
   btnSol.addEventListener('click', async () => {
-    if (!board || solved || busy) return;
+    if (!board || solved) return;
+    // Busy judging a move? Finish that first instead of ignoring the tap.
+    for (let i = 0; busy && !reviewing && i < 200 && !destroyed; i++) await sleep(50);
+    if (!board || solved || destroyed) return;
     revealed = true;
     resetStep();
     const lines = await top;
@@ -508,11 +522,24 @@ export function renderTrain(view: HTMLElement, id: string | undefined, params: U
     if (sum.rankUp) toast(`🎉 New rank: <b>${esc(rankOf(p.xp).title)}</b> (was ${esc(rankBefore.title)})`, 'win', 6000);
     btnHint.hidden = btnSol.hidden = true;
     btnNext.hidden = false;
+    topUp();
     btnNext.textContent = index + 1 < queue.length ? 'Next case →' : 'Finish session ✓';
     btnNext.focus();
   }
 
+  /**
+   * A session started while Stockfish is still analysing can be short (the
+   * first puzzle appears after one game). Top it up with the new cases found
+   * meanwhile, so it doesn't end after one puzzle.
+   */
+  const topUp = () => {
+    if (id || params.get('chapter') || queue.length >= 6) return;
+    const seen = new Set(queue.map((m) => m.id));
+    const more = buildSession(p, app.mistakes(), 6, Date.now(), theme ?? undefined).filter((m) => !seen.has(m.id));
+    queue.push(...more.slice(0, 6 - queue.length));
+  };
   btnNext.addEventListener('click', () => {
+    topUp();
     if (index + 1 < queue.length) load(index + 1);
     else sessionSummary();
   });
