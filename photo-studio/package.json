@@ -1,0 +1,21 @@
+{
+  "name": "photo-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private, on-device auto photo editor. Photos never leave your device.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "loop": "node scripts/loop.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "axe-core": "^4.14.0",
+    "typescript": "5.9",
+    "vite": "^7.3.7",
+    "vitest": "^3.2.7"
+  }
+}
